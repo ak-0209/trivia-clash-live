@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Play, Pause, SkipForward, Users, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import StreamView from "@/components/StreamView";
-import "./Host.scss";
 
 const Host = () => {
   const { toast } = useToast();
@@ -41,40 +40,40 @@ const Host = () => {
   };
 
   return (
-    <div className="host">
-      <div className="host__container">
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="container mx-auto max-w-7xl">
         {/* Header */}
-        <div className="host__header">
-          <h1>
+        <div className="mb-8">
+          <h1 className="text-4xl md:text-5xl font-black gradient-text mb-2">
             HOST PANEL
           </h1>
-          <div className="host__header-info">
+          <div className="flex items-center gap-3">
             <Badge variant={gameStatus === 'active' ? 'default' : 'secondary'} className="text-sm">
               {gameStatus === 'active' ? '🔴 LIVE' : gameStatus === 'paused' ? '⏸️ PAUSED' : '⏹️ WAITING'}
             </Badge>
-            <span>
+            <span className="text-muted-foreground">
               Question {currentQuestion} / 10
             </span>
           </div>
         </div>
 
-        <div className="host__grid">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Controls */}
-          <div className="host__main">
+          <div className="lg:col-span-2 space-y-6">
             {/* Stream Preview */}
             <StreamView />
 
             {/* Game Controls */}
-            <Card className="host__controls">
-              <h2>🎮 Game Controls</h2>
+            <Card className="glass-panel p-6">
+              <h2 className="text-xl font-bold mb-4">🎮 Game Controls</h2>
               
-              <div className="host__controls-grid">
+              <div className="grid md:grid-cols-3 gap-4">
                 {gameStatus === 'waiting' && (
                   <Button
                     variant="hero"
                     size="lg"
                     onClick={handleStartGame}
-                    style={{ gridColumn: '1 / -1' }}
+                    className="md:col-span-3"
                   >
                     <Play className="w-5 h-5" />
                     Start Game
@@ -95,7 +94,7 @@ const Host = () => {
                       variant="game"
                       size="lg"
                       onClick={handleNextQuestion}
-                      style={{ gridColumn: 'span 2' }}
+                      className="md:col-span-2"
                     >
                       <SkipForward className="w-5 h-5" />
                       Next Question
@@ -117,7 +116,7 @@ const Host = () => {
                       variant="game"
                       size="lg"
                       onClick={handleNextQuestion}
-                      style={{ gridColumn: 'span 2' }}
+                      className="md:col-span-2"
                     >
                       <SkipForward className="w-5 h-5" />
                       Next Question
@@ -128,67 +127,67 @@ const Host = () => {
             </Card>
 
             {/* Current Question */}
-            <Card className="host__question">
-              <h2>📝 Current Question</h2>
-              <div className="host__question-content">
-                <p>
+            <Card className="glass-panel p-6">
+              <h2 className="text-xl font-bold mb-4">📝 Current Question</h2>
+              <div className="bg-muted/30 rounded-lg p-6">
+                <p className="text-lg font-semibold mb-4">
                   What is the capital of France?
                 </p>
-                <div className="host__question-options">
-                  <div className="host__question-option host__question-option--default">A. London</div>
-                  <div className="host__question-option host__question-option--default">B. Berlin</div>
-                  <div className="host__question-option host__question-option--correct">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-card/50 rounded">A. London</div>
+                  <div className="p-3 bg-card/50 rounded">B. Berlin</div>
+                  <div className="p-3 bg-primary/20 rounded border-2 border-primary">
                     C. Paris ✓
                   </div>
-                  <div className="host__question-option host__question-option--default">D. Madrid</div>
+                  <div className="p-3 bg-card/50 rounded">D. Madrid</div>
                 </div>
               </div>
             </Card>
           </div>
 
           {/* Right Column - Stats */}
-          <div className="host__sidebar">
+          <div className="lg:col-span-1 space-y-6">
             {/* Player Stats */}
-            <Card className="host__stats">
-              <h3>👥 Player Stats</h3>
+            <Card className="glass-panel p-6">
+              <h3 className="text-lg font-bold mb-4">👥 Player Stats</h3>
               
-              <div className="host__stats-list">
-                <div className="host__stat">
-                  <div className="host__stat-header">
-                    <span>Total Players</span>
-                    <span>{totalPlayers}</span>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Total Players</span>
+                    <span className="font-bold">{totalPlayers}</span>
                   </div>
-                  <div className="host__stat-bar">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div 
-                      className="host__stat-bar-fill host__stat-bar-fill--primary"
+                      className="h-full bg-primary transition-all"
                       style={{ width: '100%' }}
                     />
                   </div>
                 </div>
 
-                <div className="host__stat">
-                  <div className="host__stat-header">
-                    <span>Answered</span>
-                    <span style={{ color: 'hsl(200 85% 50%)' }}>{answeredCount}</span>
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Answered</span>
+                    <span className="font-bold text-secondary">{answeredCount}</span>
                   </div>
-                  <div className="host__stat-bar">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div 
-                      className="host__stat-bar-fill host__stat-bar-fill--secondary"
+                      className="h-full bg-secondary transition-all"
                       style={{ width: `${(answeredCount / totalPlayers) * 100}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="host__stat">
-                  <div className="host__stat-header">
-                    <span>Waiting</span>
-                    <span>
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Waiting</span>
+                    <span className="font-bold text-muted-foreground">
                       {totalPlayers - answeredCount}
                     </span>
                   </div>
-                  <div className="host__stat-bar">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div 
-                      className="host__stat-bar-fill host__stat-bar-fill--muted"
+                      className="h-full bg-muted-foreground transition-all"
                       style={{ width: `${((totalPlayers - answeredCount) / totalPlayers) * 100}%` }}
                     />
                   </div>
@@ -197,19 +196,19 @@ const Host = () => {
             </Card>
 
             {/* Answer Distribution */}
-            <Card className="host__distribution">
-              <h3>📊 Answer Distribution</h3>
-              <div className="host__distribution-list">
+            <Card className="glass-panel p-6">
+              <h3 className="text-lg font-bold mb-4">📊 Answer Distribution</h3>
+              <div className="space-y-3">
                 {['A: 12%', 'B: 23%', 'C: 58%', 'D: 7%'].map((item, i) => (
-                  <div key={i} className="host__distribution-item">
-                    <span className="host__distribution-item-label">{item.split(':')[0]}</span>
-                    <div className="host__distribution-item-bar">
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-12">{item.split(':')[0]}</span>
+                    <div className="flex-1 h-6 bg-muted rounded overflow-hidden">
                       <div 
-                        className={`host__distribution-item-bar-fill ${i === 2 ? 'host__distribution-item-bar-fill--primary' : 'host__distribution-item-bar-fill--muted'}`}
+                        className={`h-full ${i === 2 ? 'bg-primary' : 'bg-muted-foreground/50'}`}
                         style={{ width: item.split(':')[1].trim() }}
                       />
                     </div>
-                    <span className="host__distribution-item-value">
+                    <span className="text-sm text-muted-foreground w-10 text-right">
                       {item.split(':')[1].trim()}
                     </span>
                   </div>
@@ -218,9 +217,9 @@ const Host = () => {
             </Card>
 
             {/* Quick Actions */}
-            <Card className="host__quick-actions">
-              <h3>⚡ Quick Actions</h3>
-              <div className="host__quick-actions-list">
+            <Card className="glass-panel p-6">
+              <h3 className="text-lg font-bold mb-4">⚡ Quick Actions</h3>
+              <div className="space-y-2">
                 <Button variant="outline" size="sm" className="w-full justify-start">
                   <Users className="w-4 h-4" />
                   View All Players

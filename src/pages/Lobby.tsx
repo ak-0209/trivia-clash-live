@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Trophy, Users, Clock } from "lucide-react";
 import Leaderboard from "@/components/Leaderboard";
 import StreamView from "@/components/StreamView";
-import "./Lobby.scss";
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -39,62 +38,62 @@ const Lobby = () => {
   const seconds = countdown % 60;
 
   return (
-    <div className="lobby">
-      <div className="lobby__container">
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="container mx-auto max-w-7xl">
         {/* Header */}
-        <div className="lobby__header">
-          <h1 className="lobby__title">
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl md:text-5xl font-black gradient-text mb-2">
             WAITING LOBBY
           </h1>
-          <p className="lobby__subtitle">
+          <p className="text-muted-foreground text-lg">
             Get ready for the next round!
           </p>
         </div>
 
         {/* Main Grid */}
-        <div className="lobby__grid">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Stream and Info */}
-          <div className="lobby__main">
+          <div className="lg:col-span-2 space-y-6">
             {/* Stream */}
             <StreamView />
 
             {/* Game Info Cards */}
-            <div className="lobby__stats">
-              <Card className="lobby__stat-card lobby__stat-card--primary">
-                <Clock />
-                <div className="lobby__stat-content">
-                  <div className="lobby__stat-value">
+            <div className="grid md:grid-cols-3 gap-4">
+              <Card className="glass-panel p-6">
+                <Clock className="w-8 h-8 text-primary mb-3 mx-auto" />
+                <div className="text-center">
+                  <div className="text-3xl font-black text-primary mb-1">
                     {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
                   </div>
-                  <div className="lobby__stat-label">Until Start</div>
+                  <div className="text-sm text-muted-foreground">Until Start</div>
                 </div>
               </Card>
 
-              <Card className="lobby__stat-card lobby__stat-card--secondary">
-                <Users />
-                <div className="lobby__stat-content">
-                  <div className="lobby__stat-value">
+              <Card className="glass-panel p-6">
+                <Users className="w-8 h-8 text-secondary mb-3 mx-auto" />
+                <div className="text-center">
+                  <div className="text-3xl font-black text-secondary mb-1">
                     {playerCount}
                   </div>
-                  <div className="lobby__stat-label">Players Joined</div>
+                  <div className="text-sm text-muted-foreground">Players Joined</div>
                 </div>
               </Card>
 
-              <Card className="lobby__stat-card lobby__stat-card--accent">
-                <Trophy />
-                <div className="lobby__stat-content">
-                  <div className="lobby__stat-value">
+              <Card className="glass-panel p-6">
+                <Trophy className="w-8 h-8 text-accent mb-3 mx-auto" />
+                <div className="text-center">
+                  <div className="text-3xl font-black text-accent mb-1">
                     $5,000
                   </div>
-                  <div className="lobby__stat-label">Prize Pool</div>
+                  <div className="text-sm text-muted-foreground">Prize Pool</div>
                 </div>
               </Card>
             </div>
 
             {/* Rules Card */}
-            <Card className="lobby__rules">
-              <h3>📋 Game Rules</h3>
-              <ul>
+            <Card className="glass-panel p-6">
+              <h3 className="text-xl font-bold mb-4">📋 Game Rules</h3>
+              <ul className="space-y-2 text-muted-foreground">
                 <li>✓ 30 seconds per question</li>
                 <li>✓ Faster correct answers earn more points</li>
                 <li>✓ No joining once game starts</li>
@@ -104,13 +103,13 @@ const Lobby = () => {
           </div>
 
           {/* Right Column - Leaderboard */}
-          <div>
+          <div className="lg:col-span-1">
             <Leaderboard title="Current Rankings" />
           </div>
         </div>
 
         {/* Action Button */}
-        <div className="lobby__actions">
+        <div className="mt-8 text-center">
           <Button 
             variant="outline" 
             size="lg"

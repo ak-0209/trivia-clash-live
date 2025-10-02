@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { Trophy } from "lucide-react";
-import "./Leaderboard.scss";
 
 interface LeaderboardProps {
   title?: string;
@@ -19,39 +18,41 @@ const mockPlayers = [
 
 const Leaderboard = ({ title = "Leaderboard" }: LeaderboardProps) => {
   return (
-    <Card className="leaderboard">
-      <div className="leaderboard__header">
-        <Trophy />
-        <h2>{title}</h2>
+    <Card className="glass-panel p-6 h-fit sticky top-8">
+      <div className="flex items-center gap-2 mb-6">
+        <Trophy className="w-5 h-5 text-primary" />
+        <h2 className="text-xl font-bold">{title}</h2>
       </div>
 
-      <div className="leaderboard__list">
+      <div className="space-y-2">
         {mockPlayers.map((player) => (
           <div
             key={player.rank}
-            className={`leaderboard__item ${
+            className={`p-3 rounded-lg flex items-center justify-between ${
               player.rank <= 3 
-                ? 'leaderboard__item--podium' 
-                : 'leaderboard__item--default'
+                ? 'bg-primary/20 border border-primary/30' 
+                : 'bg-muted/30'
             }`}
           >
-            <div className="leaderboard__player">
+            <div className="flex items-center gap-3">
               <div
-                className={`leaderboard__rank ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                   player.rank === 1
-                    ? 'leaderboard__rank--1'
+                    ? 'bg-primary text-primary-foreground'
                     : player.rank === 2
-                    ? 'leaderboard__rank--2'
+                    ? 'bg-secondary text-secondary-foreground'
                     : player.rank === 3
-                    ? 'leaderboard__rank--3'
-                    : 'leaderboard__rank--default'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-muted text-muted-foreground'
                 }`}
               >
                 {player.rank}
               </div>
-              <div className="leaderboard__name">{player.name}</div>
+              <div>
+                <div className="font-semibold text-sm">{player.name}</div>
+              </div>
             </div>
-            <div className="leaderboard__score">
+            <div className="text-sm font-bold text-primary">
               {player.score.toLocaleString()}
             </div>
           </div>

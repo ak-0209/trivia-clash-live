@@ -2,7 +2,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Trophy, Home } from "lucide-react";
-import "./LeaderboardPage.scss";
 
 const mockLeaderboard = [
   { rank: 1, name: "AlexChamp", score: 8750, prize: "$1,500" },
@@ -21,57 +20,57 @@ const LeaderboardPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="leaderboard-page">
-      <div className="leaderboard-page__container">
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="container mx-auto max-w-4xl">
         {/* Header */}
-        <div className="leaderboard-page__header">
-          <Trophy />
-          <h1>
+        <div className="text-center mb-12">
+          <Trophy className="w-20 h-20 mx-auto mb-6 text-primary glow-strong" />
+          <h1 className="text-5xl md:text-6xl font-black gradient-text mb-4">
             FINAL RESULTS
           </h1>
-          <p>
+          <p className="text-xl text-muted-foreground">
             Congratulations to all winners!
           </p>
         </div>
 
         {/* Leaderboard */}
-        <Card className="leaderboard-page__list">
-          <div className="leaderboard-page__items">
+        <Card className="glass-panel p-6 mb-8">
+          <div className="space-y-3">
             {mockLeaderboard.map((player) => (
               <div
                 key={player.rank}
-                className={`leaderboard-page__item ${
+                className={`p-4 rounded-lg flex items-center justify-between ${
                   player.rank <= 3
-                    ? 'leaderboard-page__item--podium'
-                    : 'leaderboard-page__item--default'
+                    ? 'bg-gradient-to-r from-primary/20 to-secondary/20 glow-primary'
+                    : 'bg-muted/30'
                 }`}
               >
-                <div className="leaderboard-page__player">
+                <div className="flex items-center gap-4">
                   <div
-                    className={`leaderboard-page__rank ${
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${
                       player.rank === 1
-                        ? 'leaderboard-page__rank--1'
+                        ? 'bg-primary text-primary-foreground'
                         : player.rank === 2
-                        ? 'leaderboard-page__rank--2'
+                        ? 'bg-secondary text-secondary-foreground'
                         : player.rank === 3
-                        ? 'leaderboard-page__rank--3'
-                        : 'leaderboard-page__rank--default'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'bg-muted text-muted-foreground'
                     }`}
                   >
                     {player.rank}
                   </div>
-                  <div className="leaderboard-page__player-info">
-                    <div className="leaderboard-page__player-info-name">{player.name}</div>
-                    <div className="leaderboard-page__player-info-score">
+                  <div>
+                    <div className="font-bold text-lg">{player.name}</div>
+                    <div className="text-sm text-muted-foreground">
                       {player.score.toLocaleString()} points
                     </div>
                   </div>
                 </div>
-                <div className="leaderboard-page__prize">
-                  <div className="leaderboard-page__prize-amount">
+                <div className="text-right">
+                  <div className="text-xl font-black text-primary">
                     {player.prize}
                   </div>
-                  <div className="leaderboard-page__prize-label">Prize</div>
+                  <div className="text-xs text-muted-foreground">Prize</div>
                 </div>
               </div>
             ))}
@@ -79,7 +78,7 @@ const LeaderboardPage = () => {
         </Card>
 
         {/* Actions */}
-        <div className="leaderboard-page__actions">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button variant="hero" size="lg" onClick={() => navigate('/lobby')}>
             <Trophy className="w-5 h-5" />
             Join Next Game
