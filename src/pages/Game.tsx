@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Clock } from "lucide-react";
 import StreamView from "@/components/StreamView";
 import Leaderboard from "@/components/Leaderboard";
+import "./Game.scss";
 
 interface Question {
   id: number;
@@ -95,42 +96,40 @@ const Game = () => {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="container mx-auto max-w-7xl">
+    <div className="game">
+      <div className="game__container">
         {/* Header */}
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black gradient-text">
+        <div className="game__header">
+          <div className="game__info">
+            <h1>
               QUESTION {currentQuestionIndex + 1} / {mockQuestions.length}
             </h1>
-            <p className="text-muted-foreground">Your Score: {score}</p>
+            <p>Your Score: {score}</p>
           </div>
-          <Card className="glass-panel px-6 py-3">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              <span className="text-2xl font-black text-primary">
-                {timeLeft}s
-              </span>
-            </div>
+          <Card className="game__timer-card">
+            <Clock />
+            <span>
+              {timeLeft}s
+            </span>
           </Card>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="game__grid">
           {/* Left Column - Question */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="game__main">
             {!isWaiting ? (
               <>
                 {/* Timer Progress */}
-                <Progress value={progress} className="h-2" />
+                <Progress value={progress} className="game__progress" />
 
                 {/* Question Card */}
-                <Card className="glass-panel p-8 glow-primary">
-                  <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
+                <Card className="game__question-card">
+                  <h2 className="game__question-text">
                     {currentQuestion.question}
                   </h2>
 
                   {/* Answer Options */}
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="game__answers">
                     {currentQuestion.options.map((option, index) => (
                       <Button
                         key={index}
@@ -153,18 +152,18 @@ const Game = () => {
               <>
                 {/* Waiting Screen */}
                 <StreamView />
-                <Card className="glass-panel p-8 text-center">
-                  <h2 className="text-2xl font-bold mb-4">
+                <Card className="game__waiting">
+                  <h2>
                     {selectedAnswer === currentQuestion.correctAnswer 
                       ? "🎉 Correct!" 
                       : selectedAnswer === null 
                       ? "⏰ Time's Up!" 
                       : "❌ Incorrect"}
                   </h2>
-                  <p className="text-muted-foreground mb-4">
+                  <p>
                     Waiting for next question...
                   </p>
-                  <div className="animate-pulse text-primary text-lg">
+                  <div className="game__waiting-text">
                     Next question starting soon
                   </div>
                 </Card>
@@ -173,7 +172,7 @@ const Game = () => {
           </div>
 
           {/* Right Column - Leaderboard */}
-          <div className="lg:col-span-1">
+          <div>
             <Leaderboard title="Live Rankings" />
           </div>
         </div>

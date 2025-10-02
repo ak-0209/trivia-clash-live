@@ -1,0 +1,132 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.lobby {
+  min-height: 100vh;
+  padding: 1rem;
+
+  @media (min-width: 768px) {
+    padding: 2rem;
+  }
+
+  &__container {
+    max-width: 90rem;
+    margin: 0 auto;
+  }
+
+  &__header {
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  &__title {
+    font-size: 2.25rem;
+    font-weight: 900;
+    @include gradient-text;
+    margin-bottom: 0.5rem;
+
+    @media (min-width: 768px) {
+      font-size: 3rem;
+    }
+  }
+
+  &__subtitle {
+    color: hsl($muted-foreground);
+    font-size: 1.125rem;
+  }
+
+  &__grid {
+    display: grid;
+    gap: 1.5rem;
+
+    @media (min-width: 1024px) {
+      grid-template-columns: 2fr 1fr;
+    }
+  }
+
+  &__main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  &__stats {
+    display: grid;
+    gap: 1rem;
+
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  &__stat-card {
+    @include glass-panel;
+    padding: 1.5rem;
+
+    svg {
+      width: 2rem;
+      height: 2rem;
+      margin: 0 auto 0.75rem;
+    }
+
+    &--primary {
+      svg, .lobby__stat-value {
+        color: hsl($primary);
+      }
+    }
+
+    &--secondary {
+      svg, .lobby__stat-value {
+        color: hsl($secondary);
+      }
+    }
+
+    &--accent {
+      svg, .lobby__stat-value {
+        color: hsl($accent);
+      }
+    }
+  }
+
+  &__stat-content {
+    text-align: center;
+  }
+
+  &__stat-value {
+    font-size: 1.875rem;
+    font-weight: 900;
+    margin-bottom: 0.25rem;
+  }
+
+  &__stat-label {
+    font-size: 0.875rem;
+    color: hsl($muted-foreground);
+  }
+
+  &__rules {
+    @include glass-panel;
+    padding: 1.5rem;
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      li {
+        color: hsl($muted-foreground);
+      }
+    }
+  }
+
+  &__actions {
+    margin-top: 2rem;
+    text-align: center;
+  }
+}

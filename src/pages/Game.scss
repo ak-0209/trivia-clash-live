@@ -1,0 +1,136 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.game {
+  min-height: 100vh;
+  padding: 1rem;
+
+  @media (min-width: 768px) {
+    padding: 2rem;
+  }
+
+  &__container {
+    max-width: 90rem;
+    margin: 0 auto;
+  }
+
+  &__header {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__info {
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 900;
+      @include gradient-text;
+
+      @media (min-width: 768px) {
+        font-size: 1.875rem;
+      }
+    }
+
+    p {
+      color: hsl($muted-foreground);
+    }
+  }
+
+  &__timer-card {
+    @include glass-panel;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    svg {
+      width: 1.25rem;
+      height: 1.25rem;
+      color: hsl($primary);
+    }
+
+    span {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: hsl($primary);
+    }
+  }
+
+  &__grid {
+    display: grid;
+    gap: 1.5rem;
+
+    @media (min-width: 1024px) {
+      grid-template-columns: 2fr 1fr;
+    }
+  }
+
+  &__main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  &__progress {
+    height: 0.5rem;
+  }
+
+  &__question-card {
+    @include glass-panel;
+    @include glow-primary;
+    padding: 2rem;
+  }
+
+  &__question-text {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    text-align: center;
+
+    @media (min-width: 768px) {
+      font-size: 1.875rem;
+    }
+  }
+
+  &__answers {
+    display: grid;
+    gap: 1rem;
+
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  &__waiting {
+    @include glass-panel;
+    padding: 2rem;
+    text-align: center;
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    p {
+      color: hsl($muted-foreground);
+      margin-bottom: 1rem;
+    }
+
+    .game__waiting-text {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      color: hsl($primary);
+      font-size: 1.125rem;
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
