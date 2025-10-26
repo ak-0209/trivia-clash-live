@@ -1,66 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
+import { Volume2, VolumeX, RefreshCw, Radio, Tv } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-interface StreamViewProps {
-  youtubeUrl?: string;
-  isMuted?: boolean;
-  onMuteToggle?: (muted: boolean) => void;
-  isHost?: boolean;
-}
-
-const loadYouTubeAPI = (): Promise<void> => {
-  return new Promise((resolve) => {
-    if (window.YT && window.YT.Player) return resolve();
-    const existing = document.getElementById("yt-iframe-api");
-    if (existing) {
-      window.onYouTubeIframeAPIReady = () => resolve();
-      return;
-    }
-    const tag = document.createElement("script");
-    tag.id = "yt-iframe-api";
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
-    window.onYouTubeIframeAPIReady = () => resolve();
-  });
-};
-
-const extractVideoId = (url: string) => {
-  try {
-    if (!url) return "";
-    if (url.includes("youtube.com/watch")) {
-      const u = new URL(url);
-      return u.searchParams.get("v") || "";
-    }
-    if (url.includes("youtu.be/")) {
-      return url.split("/").pop() || "";
-    }
-    if (url.includes("youtube.com/embed/")) {
-      const u = new URL(url);
-      return u.pathname.split("/").pop() || "";
-    }
-    const m = url.match(/(?:v=|\/embed\/|youtu\.be\/)([^&?/]+)/);
-    return m ? m[1] : "";
-  } catch {
-    return "";
-  }
-};
-
-const StreamView = ({
+export const LobbyStreamView = ({
   youtubeUrl = "https://www.youtube.com/embed/YDvsBbKfLPA",
   isMuted = false,
-  onMuteToggle,
-  isHost = false,
-}: StreamViewProps) => {
+}) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +15,45 @@ const StreamView = ({
   const [currentMuted, setCurrentMuted] = useState<boolean>(isMuted);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Sync incoming prop to internal state
+  // Load YouTube API
+  const loadYouTubeAPI = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if (window.YT && window.YT.Player) return resolve();
+      const existing = document.getElementById("yt-iframe-api-lobby");
+      if (existing) {
+        window.onYouTubeIframeAPIReady = () => resolve();
+        return;
+      }
+      const tag = document.createElement("script");
+      tag.id = "yt-iframe-api-lobby";
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+      window.onYouTubeIframeAPIReady = () => resolve();
+    });
+  };
+
+  const extractVideoId = (url: string) => {
+    try {
+      if (!url) return "";
+      if (url.includes("youtube.com/watch")) {
+        const u = new URL(url);
+        return u.searchParams.get("v") || "";
+      }
+      if (url.includes("youtu.be/")) {
+        return url.split("/").pop() || "";
+      }
+      if (url.includes("youtube.com/embed/")) {
+        const u = new URL(url);
+        return u.pathname.split("/").pop() || "";
+      }
+      const m = url.match(/(?:v=|\/embed\/|youtu\.be\/)([^&?/]+)/);
+      return m ? m[1] : "";
+    } catch {
+      return "";
+    }
+  };
+
+  // Sync mute state
   useEffect(() => {
     setCurrentMuted(isMuted);
     if (playerRef.current) {
@@ -81,7 +66,7 @@ const StreamView = ({
     }
   }, [isMuted]);
 
-  // Create or update YT player when url changes
+  // Initialize YouTube player
   useEffect(() => {
     let mounted = true;
     const init = async () => {
@@ -101,14 +86,12 @@ const StreamView = ({
 
         if (!mounted) return;
 
-        // If we already have a player, load the new video and return
         if (playerRef.current) {
           try {
             playerRef.current.loadVideoById(videoId);
             if (currentMuted) playerRef.current.mute();
             else playerRef.current.unMute();
 
-            // Force play when refreshing
             setTimeout(() => {
               if (playerRef.current && playerRef.current.playVideo) {
                 playerRef.current.playVideo();
@@ -123,15 +106,15 @@ const StreamView = ({
           }
         }
 
-        // Create container if none
         const container = containerRef.current!;
-        const iframeId = "yt-player-" + Math.random().toString(36).slice(2, 9);
+        const iframeId =
+          "yt-player-lobby-" + Math.random().toString(36).slice(2, 9);
         const placeholder = document.createElement("div");
         placeholder.id = iframeId;
         container
-          .querySelectorAll(":scope > div.yt-placeholder")
+          .querySelectorAll(":scope > div.yt-placeholder-lobby")
           .forEach((n) => n.remove());
-        placeholder.className = "yt-placeholder";
+        placeholder.className = "yt-placeholder-lobby";
         container.appendChild(placeholder);
 
         playerRef.current = new window.YT.Player(iframeId, {
@@ -153,11 +136,12 @@ const StreamView = ({
             onReady: (event: any) => {
               if (!mounted) return;
               try {
-                console.log("🎬 YouTube Player Ready - Starting playback...");
+                console.log(
+                  "🎬 Lobby YouTube Player Ready - Starting playback...",
+                );
                 if (currentMuted) event.target.mute();
                 else event.target.unMute();
 
-                // Force play when ready
                 setTimeout(() => {
                   event.target.playVideo();
                 }, 500);
@@ -174,21 +158,15 @@ const StreamView = ({
             onStateChange: (evt: any) => {
               if (!mounted) return;
 
-              // YT.PlayerState.PLAYING = 1
               if (evt.data === 1) {
-                console.log("🎬 Video started playing");
+                console.log("🎬 Lobby video started playing");
                 setLoading(false);
                 setIsPlaying(true);
-              }
-              // YT.PlayerState.BUFFERING = 3
-              else if (evt.data === 3) {
+              } else if (evt.data === 3) {
                 setLoading(true);
-              }
-              // YT.PlayerState.ENDED = 0, PAUSED = 2
-              else if (evt.data === 0 || evt.data === 2) {
+              } else if (evt.data === 0 || evt.data === 2) {
                 setIsPlaying(false);
 
-                // AUTO-RESTART if paused or ended (for live streams)
                 if (playerRef.current && playerRef.current.playVideo) {
                   setTimeout(() => {
                     playerRef.current.playVideo();
@@ -218,11 +196,10 @@ const StreamView = ({
     };
   }, [youtubeUrl]);
 
-  // 🚨 CRITICAL FIX: Block ALL interactions with YouTube iframe
+  // 🚨 CRITICAL: Block ALL interactions with YouTube iframe
   useEffect(() => {
     const blockAllInteractions = () => {
-      // Block pointer events on iframe
-      const iframes = document.querySelectorAll(".yt-placeholder iframe");
+      const iframes = document.querySelectorAll(".yt-placeholder-lobby iframe");
       iframes.forEach((iframe) => {
         const iframeElement = iframe as HTMLElement;
         iframeElement.style.pointerEvents = "none";
@@ -230,8 +207,7 @@ const StreamView = ({
         iframeElement.style.webkitUserSelect = "none";
       });
 
-      // Also block any parent containers
-      const placeholders = document.querySelectorAll(".yt-placeholder");
+      const placeholders = document.querySelectorAll(".yt-placeholder-lobby");
       placeholders.forEach((placeholder) => {
         const placeholderElement = placeholder as HTMLElement;
         placeholderElement.style.pointerEvents = "none";
@@ -241,24 +217,10 @@ const StreamView = ({
     };
 
     blockAllInteractions();
-    const interval = setInterval(blockAllInteractions, 500); // More frequent checking
+    const interval = setInterval(blockAllInteractions, 500);
 
     return () => clearInterval(interval);
   }, []);
-
-  const handleHostMuteToggle = () => {
-    const next = !currentMuted;
-    setCurrentMuted(next);
-    if (playerRef.current) {
-      try {
-        if (next) playerRef.current.mute();
-        else playerRef.current.unMute();
-      } catch (e) {
-        console.warn("mute toggle failed:", e);
-      }
-    }
-    if (onMuteToggle) onMuteToggle(next);
-  };
 
   const handleRefresh = () => {
     setLoading(true);
@@ -271,7 +233,6 @@ const StreamView = ({
         if (videoId) {
           playerRef.current.loadVideoById(videoId);
 
-          // Force play after refresh
           setTimeout(() => {
             if (playerRef.current && playerRef.current.playVideo) {
               playerRef.current.playVideo();
@@ -296,40 +257,17 @@ const StreamView = ({
       <div className="p-4 border-b border-border bg-red-600 text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Radio className="w-5 h-5 animate-pulse" />
+            <Tv className="w-5 h-5" />
             <h2 className="text-xl font-bold">🔴 LIVE STREAM</h2>
           </div>
-          <div className="flex items-center gap-2">
-            {isHost && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleHostMuteToggle}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30"
-              >
-                {currentMuted ? (
-                  <VolumeX className="w-4 h-4" />
-                ) : (
-                  <Volume2 className="w-4 h-4" />
-                )}
-                {currentMuted ? "Unmute All" : "Mute All"}
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleRefresh}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </Button>
-          </div>
+          <Badge variant="secondary" className="bg-white text-red-600">
+            {currentMuted ? "🔇 MUTED" : "🔊 LIVE"}
+          </Badge>
         </div>
       </div>
 
       <div className="relative aspect-video bg-black">
-        {/* Loading overlay - only show if loading AND not playing */}
+        {/* Loading overlay */}
         {loading && !isPlaying && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 text-white">
             <div className="text-center">
@@ -353,7 +291,7 @@ const StreamView = ({
           </div>
         )}
 
-        {/* 🚨 CRITICAL: Add a blocking overlay that covers the entire video area */}
+        {/* 🚨 CRITICAL: Blocking overlay */}
         <div
           className="absolute inset-0 z-20 bg-transparent"
           style={{
@@ -363,7 +301,7 @@ const StreamView = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log("🚫 Blocked click on video");
+            console.log("🚫 Blocked click on lobby video");
           }}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -374,24 +312,6 @@ const StreamView = ({
         {/* Player container - behind the blocking overlay */}
         <div ref={containerRef} className="w-full h-full relative z-10" />
       </div>
-
-      <div className="p-3 bg-red-500 text-white border-t border-red-600">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-white text-red-600">
-              {loading ? "LOADING..." : error ? "❌ OFFLINE" : "🔴 LIVE"}
-            </Badge>
-            <span className="text-white/80">
-              {isHost ? "HOST STREAM" : "WATCHING LIVE"}
-            </span>
-          </div>
-          <span className="text-white/80">
-            {currentMuted ? "🔇 MUTED" : "🔊 LIVE AUDIO"}
-          </span>
-        </div>
-      </div>
     </Card>
   );
 };
-
-export default StreamView;
