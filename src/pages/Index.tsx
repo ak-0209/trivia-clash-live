@@ -59,59 +59,46 @@ const Index = () => {
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className="py-24 container mx-auto px-4">
-        <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 gradient-text">
-          How It Works
-        </h2>
+      <section className="how-it-works">
+        <div className="how-container">
+          <h2 className="how-title leaguegothic text-white l1">How It Works</h2>
 
-        <div className="max-w-4xl mx-auto space-y-8">
-          <div className="glass-panel p-8 rounded-xl">
-            <div className="flex items-start gap-6">
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-2xl font-bold flex-shrink-0">
-                1
+          <div className="how-steps">
+            {[
+              {
+                step: 1,
+                title: "Pay & Join Lobby",
+                text: "Pay the entry fee and join the lobby. Watch the live host stream and see other players joining in real time.",
+                gradient: "gradient-indigo",
+              },
+              {
+                step: 2,
+                title: "Answer Questions",
+                text: "Once the game starts, answer questions within 30 seconds. Faster correct answers earn more points!",
+                gradient: "gradient-purple",
+              },
+              {
+                step: 3,
+                title: "Win Prizes",
+                text: "Top performers share the prize pool. Winners receive instant payouts automatically.",
+                gradient: "gradient-pink",
+              },
+            ].map(({ step, title, text, gradient }) => (
+              <div key={step} className="how-card">
+                <div className="how-card-inner">
+                  <div className={`how-step`}>{step}</div>
+                  <div className="how-content">
+                    <h3 className="how-subtitle">{title}</h3>
+                    <p className="how-text">{text}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-2xl font-bold mb-2">Pay & Join Lobby</h3>
-                <p className="text-muted-foreground text-lg">
-                  Pay entry fee and wait in the lobby. Watch the live host
-                  stream and see other players joining.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel p-8 rounded-xl">
-            <div className="flex items-start gap-6">
-              <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-2xl font-bold flex-shrink-0">
-                2
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold mb-2">Answer Questions</h3>
-                <p className="text-muted-foreground text-lg">
-                  When game starts, answer questions in 30 seconds. Faster
-                  correct answers earn more points!
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel p-8 rounded-xl">
-            <div className="flex items-start gap-6">
-              <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-2xl font-bold flex-shrink-0">
-                3
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold mb-2">Win Prizes</h3>
-                <p className="text-muted-foreground text-lg">
-                  Top performers share the prize pool. Automatic payouts to
-                  winners!
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
+
+
     </div>
   );
 };
