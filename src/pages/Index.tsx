@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Trophy, Users, Zap, DollarSign } from "lucide-react";
 import heroImage from "@/assets/hero-trivia.jpg";
+import dressingroom from "@/assets/dressingroom.webp";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -13,69 +14,45 @@ const Index = () => {
         <div
           className="absolute inset-0 z-0"
           style={{
-            backgroundImage: `url(${heroImage})`,
+            backgroundImage: `url(${dressingroom})`,
             backgroundSize: "cover",
             backgroundPosition: "center",
-            filter: "brightness(0.3)",
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background z-10" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/0 to-background z-10" />
 
         <div className="relative z-20 container mx-auto px-4 text-center">
-          <h1 className="text-6xl md:text-8xl font-black mb-6 gradient-text">
-            LIVE TRIVIA
-          </h1>
-          <p className="text-xl md:text-3xl mb-4 text-foreground/90 font-semibold">
-            Compete in Real-Time. Win Real Money.
-          </p>
-          <p className="text-lg md:text-xl mb-12 text-muted-foreground max-w-2xl mx-auto">
-            Join thousands of players in live trivia games with cash prizes. 30
-            minutes of intense competition.
-          </p>
+          <div className="herosection">
+            <div className="l1 leaguegothic">TOPCLUB LIVE TRIVIA</div>
+            <div className="l2 leaguegothic">Compete in Real-Time. Win Real Money.</div>
+            <div className="l3">Join thousands of players in live trivia games with cash prizes. 30 minutes of intense competition.</div>
+          </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Button
-              variant="hero"
-              size="xl"
-              onClick={() => navigate("/auth")}
-              className="animate-pulse-glow"
-            >
-              <Zap className="w-5 h-5" />
-              Join Next Game
-            </Button>
-            <Button
-              variant="secondary"
-              size="xl"
-              onClick={() => navigate("/host")}
-            >
-              <Users className="w-5 h-5" />
-              Host Panel
-            </Button>
+          <div className="hero_bt">
+            <div className="bt1 leaguegothic cursor-pointer" onClick={() => navigate("/auth")}>JOIN NEXT MATCH</div>
+            <div className="bt2 leaguegothic cursor-pointer" onClick={() => navigate("/host")}>HOST PANEL</div>
           </div>
 
           {/* Feature Cards */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            <div className="glass-panel p-6 rounded-xl">
-              <Trophy className="w-12 h-12 mx-auto mb-4 text-primary" />
-              <h3 className="text-xl font-bold mb-2">Win Big</h3>
-              <p className="text-muted-foreground">
-                Top players share the prize pool based on leaderboard position
+          <div className="grid md:grid-cols-3 gap-6 px-2 py-6">
+            <div className="card-info glassmorphism-light">
+              <h3 className="text-white leaguegothic card-header">Win Big</h3>
+              <p className="text-white/70 inter card-desc">
+                Every correct answer boosts you up the ranks. Battle for a top spot and secure a bigger piece of the prize pool.
               </p>
             </div>
 
-            <div className="glass-panel p-6 rounded-xl">
-              <Zap className="w-12 h-12 mx-auto mb-4 text-secondary" />
-              <h3 className="text-xl font-bold mb-2">Real-Time Action</h3>
-              <p className="text-muted-foreground">
-                All players answer simultaneously with live leaderboard updates
+            <div className="card-info glassmorphism-light">
+              <h3 className="text-white leaguegothic card-header">Real-Time Action</h3>
+              <p className="text-white/70 inter card-desc">
+                Face off against thousands of players at once. Lock in your answers fast and watch the leaderboard change with every single question.
               </p>
             </div>
 
-            <div className="glass-panel p-6 rounded-xl">
-              <DollarSign className="w-12 h-12 mx-auto mb-4 text-accent" />
-              <h3 className="text-xl font-bold mb-2">Easy Entry</h3>
-              <p className="text-muted-foreground">
-                Pay once to enter, winners get automatic payouts
+            <div className="card-info glassmorphism-light">
+              <h3 className="text-white leaguegothic card-header">Easy Entry</h3>
+              <p className="text-white/70 inter card-desc">
+                Forget long sign-ups. Pay your entry and you're in. Winners get instant, automatic cashouts.
               </p>
             </div>
           </div>
