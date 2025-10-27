@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import dressingroom from "@/assets/dressingroom.webp";
 
 // import { apiRequest } from "../lib/queryCient"; // not used here, using fetch directly
 
@@ -272,14 +273,25 @@ export default function AuthPage() {
   const loading = isLoading || signupMutation.status === "pending";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-card rounded-3xl shadow-2xl p-10 border border-card-border">
+    <div
+      className="relative min-h-screen flex items-center justify-center bg-background p-4 text-white"
+      style={{
+        backgroundImage: `url(${dressingroom})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/0 to-background z-0" />
+
+      {/* Auth Card */}
+      <div className="w-full max-w-md relative z-10">
+        <div className="glassmorphism-medium rounded-3xl shadow-2xl p-10 border border-card-border">
           <div className="text-center mb-10">
-            <h1 className="text-5xl font-bold tracking-tight mb-2">
+            <h1 className="text-white text-5xl leaguegothic uppercase tracking-tight mb-2">
               Top Club Trivia
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-white/70 text-sm">
               {step === "credentials"
                 ? mode === "signup"
                   ? "Create your account to get started"
@@ -288,16 +300,17 @@ export default function AuthPage() {
             </p>
           </div>
 
+          {/* Sign In / Sign Up Tabs */}
           {step === "credentials" && (
             <div className="mb-8">
-              <div className="grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg">
+              <div className="grid grid-cols-2 gap-2 p-1 bg-white/10 rounded-lg">
                 <button
                   data-testid="button-signup-tab"
                   onClick={() => switchMode("signup")}
-                  className={`py-2.5 px-4 rounded-md font-semibold text-sm transition-all ${
+                  className={`leaguegothic uppercase py-2.5 px-4 rounded-md text-xl transition-all ${
                     mode === "signup"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover-elevate"
+                      ? "glassmorphism-medium text-white/100 bg-primary text-primary-foreground shadow-sm"
+                      : "text-white/70 hover:text-white"
                   }`}
                 >
                   Sign Up
@@ -305,10 +318,10 @@ export default function AuthPage() {
                 <button
                   data-testid="button-signin-tab"
                   onClick={() => switchMode("signin")}
-                  className={`py-2.5 px-4 rounded-md font-semibold text-sm transition-all ${
+                  className={`leaguegothic uppercase py-2.5 px-4 rounded-md text-xl transition-all ${
                     mode === "signin"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover-elevate"
+                      ? "glassmorphism-medium text-white/100 bg-primary text-primary-foreground shadow-sm"
+                      : "text-white/70 hover:text-white"
                   }`}
                 >
                   Sign In
@@ -317,12 +330,13 @@ export default function AuthPage() {
             </div>
           )}
 
+          {/* Credentials Form */}
           {step === "credentials" ? (
-            <form onSubmit={handleSubmitCredentials} className="space-y-5">
+            <form onSubmit={handleSubmitCredentials} className="space-y-5 inter">
               {mode === "signup" && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-sm font-medium">
+                    <Label htmlFor="firstName" className="text-sm font-medium text-white">
                       First Name
                     </Label>
                     <Input
@@ -333,12 +347,12 @@ export default function AuthPage() {
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-11 bg-white/10 border-white/20 placeholder:text-white/40 text-white"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-sm font-medium">
+                    <Label htmlFor="lastName" className="text-sm font-medium text-white">
                       Last Name
                     </Label>
                     <Input
@@ -349,7 +363,7 @@ export default function AuthPage() {
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-11 bg-white/10 border-white/20 placeholder:text-white/40 text-white"
                       required
                     />
                   </div>
@@ -357,7 +371,7 @@ export default function AuthPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
+                <Label htmlFor="email" className="text-sm font-medium text-white">
                   Email
                 </Label>
                 <Input
@@ -368,14 +382,14 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  className="h-11"
+                  className="h-11 bg-white/10 border-white/20 placeholder:text-white/40 text-white"
                   required
                 />
               </div>
 
               {mode === "signin" && (
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium">
+                  <Label htmlFor="password" className="text-sm font-medium text-white">
                     Password
                   </Label>
                   <Input
@@ -386,7 +400,7 @@ export default function AuthPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}
-                    className="h-11"
+                    className="h-11 bg-white/10 border-white/20 placeholder:text-white/40 text-white"
                     required
                   />
                 </div>
@@ -395,8 +409,8 @@ export default function AuthPage() {
               <Button
                 type="submit"
                 data-testid="button-continue"
-                className="w-full h-11 font-semibold"
                 disabled={loading}
+                className="w-full h-11 font-semibold text-white rounded-2xl bg-gradient-to-r from-red-500 via-orange-500 to-yellow-400"
               >
                 {loading ? (
                   <>
@@ -407,11 +421,13 @@ export default function AuthPage() {
                   "Continue"
                 )}
               </Button>
+
             </form>
           ) : (
+            // Verification Form
             <form onSubmit={handleVerifyCode} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="code" className="text-sm font-medium">
+                <Label htmlFor="code" className="text-sm font-medium text-white">
                   Verification Code
                 </Label>
                 <Input
@@ -422,11 +438,11 @@ export default function AuthPage() {
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
                   disabled={loading}
-                  className="h-11 text-2xl tracking-widest text-center font-semibold"
+                  className="h-11 text-2xl tracking-widest text-center font-semibold bg-white/10 border-white/20 text-white"
                   maxLength={6}
                   required
                 />
-                <p className="text-xs text-muted-foreground text-center">
+                <p className="text-xs text-white/70 text-center">
                   Code sent to {email}
                 </p>
               </div>
@@ -452,7 +468,7 @@ export default function AuthPage() {
                   type="button"
                   data-testid="button-resend"
                   onClick={handleResendCode}
-                  className="text-sm font-medium hover-elevate active-elevate-2 underline"
+                  className="text-sm font-medium underline hover:text-white/90 text-white"
                   disabled={loading}
                 >
                   Resend code
@@ -460,8 +476,12 @@ export default function AuthPage() {
               </div>
             </form>
           )}
+          <p className="text-xs text-white/70 mt-2 text-center">
+            You can use your <span className="underline font-medium cursor-pointer text-white" onClick={() => window.open("https://topclubfantasy.com/", "_blank")}>Topclub Fantasy</span> credentials to <strong className="text-white">Sign In</strong>.
+          </p>
         </div>
       </div>
     </div>
+
   );
 }
