@@ -24,16 +24,31 @@ class TriviaSocket {
   private questionTimeLimits: Map<string, number> = new Map();
 
   constructor(server: any) {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    const frontendOrigin = isProduction
+      ? process.env.FRONTEND_URL
+      : ["http://localhost:8080", "http://localhost:3000"];
+
+    if (isProduction && !process.env.FRONTEND_URL) {
+      console.warn(
+        "Warning: NODE_ENV=production but FRONTEND_URL is not set. Socket.IO CORS may be too permissive.",
+      );
+    }
+
     this.io = new SocketServer(server, {
       cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:8080",
+        origin: frontendOrigin,
         methods: ["GET", "POST"],
         credentials: true,
       },
     });
+
     console.log(
-      "Socket.IO server created with CORS for:",
-      process.env.FRONTEND_URL || "http://localhost:8080",
+      "Socket.IO server created with CORS origin:",
+      Array.isArray(frontendOrigin)
+        ? frontendOrigin.join(", ")
+        : frontendOrigin,
     );
 
     this.initializeSocket();

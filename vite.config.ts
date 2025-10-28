@@ -9,16 +9,16 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      "/api/auth/triviasignup": {
-        target: "http://localhost:4000",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/api/auth/trivia-signin": {
-        target: "http://localhost:4000",
-        changeOrigin: true,
-        secure: false,
-      },
+      // "/api/auth/triviasignup": {
+      //   target: "http://localhost:4000",
+      //   changeOrigin: true,
+      //   secure: false,
+      // },
+      // "/api/auth/trivia-signin": {
+      //   target: "http://localhost:4000",
+      //   changeOrigin: true,
+      //   secure: false,
+      // },
       "/api/auth": {
         target: "https://topclubfantasy.com",
         changeOrigin: true,
