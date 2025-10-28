@@ -253,12 +253,12 @@ export const LobbyStreamView = ({
   };
 
   return (
-    <Card className="glass-panel overflow-hidden border-2 border-red-500">
-      <div className="p-4 border-b border-border bg-red-600 text-white">
+    <Card className="glass-panel overflow-hidden border-2 border-red-500 ">
+      <div className="p-4 border-b border-border text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Tv className="w-5 h-5" />
-            <h2 className="text-xl font-bold">🔴 LIVE STREAM</h2>
+            <h2 className="text-4xl leaguegothic uppercase text-white">🔴 LIVE STREAM</h2>
           </div>
           <Badge variant="secondary" className="bg-white text-red-600">
             {currentMuted ? "🔇 MUTED" : "🔊 LIVE"}

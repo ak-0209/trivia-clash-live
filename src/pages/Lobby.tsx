@@ -7,6 +7,7 @@ import { Users, Clock, Tv } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { LobbyStreamView } from "@/components/LobbyStreamView";
+import dressingroom from "@/assets/dressingroom.webp";
 
 // Types for WebSocket data
 interface LobbyUser {
@@ -331,18 +332,31 @@ const Lobby = () => {
   const statusDisplay = getStatusDisplay();
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="container mx-auto max-w-7xl">
+    <div 
+      className="min-h-screen p-4 md:p-8 inter"
+      style={{
+        backgroundImage: `
+          linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.4)),
+          url(${dressingroom})
+        `,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+      <div 
+        className="container mx-auto max-w-7xl"
+      >
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-black gradient-text mb-2">
+          <h1 className="text-8xl leaguegothic uppercase text-white">
             TRIVIA LOBBY
           </h1>
           <div className="flex items-center justify-center gap-4">
-            <Badge variant={statusDisplay.badge as any} className="text-sm">
+            <Badge variant={statusDisplay.badge as any} className="text-sm text-white">
               {statusDisplay.text}
             </Badge>
-            <p className="text-muted-foreground text-lg">
+            <p className="text-muted-foreground text-lg text-white">
               {lobbyName} -{" "}
               <span className={isConnected ? "text-green-500" : "text-red-500"}>
                 {isConnected ? "Connected" : "Connecting..."}
@@ -354,7 +368,7 @@ const Lobby = () => {
         {/* Main Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Stream and Info */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 flex flex-col gap-4 ">
             {/* Stream */}
             {/* Stream or Question */}
             {/* ALWAYS PLAYING STREAM - NEVER STOPS */}
@@ -430,13 +444,13 @@ const Lobby = () => {
 
             {/* Game Info Cards */}
             <div className="grid md:grid-cols-2 gap-4">
-              <Card className="glass-panel p-6">
-                <Clock className="w-8 h-8 text-primary mb-3 mx-auto" />
+              <Card className="glassmorphism-light px-6 py-6 flex flex-col gap-4">
+                <Clock className="w-8 h-8 text-primary mb-3 mx-auto text-white" />
                 <div className="text-center">
                   <div className="text-3xl font-black text-primary mb-1">
                     {lobbyStatus === "countdown" ? `${countdown}s` : "—"}
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-muted-foreground text-white">
                     {lobbyStatus === "countdown"
                       ? "Starting Soon"
                       : lobbyStatus === "active"
@@ -446,13 +460,13 @@ const Lobby = () => {
                 </div>
               </Card>
 
-              <Card className="glass-panel p-6">
-                <Users className="w-8 h-8 text-secondary mb-3 mx-auto" />
+              <Card className="glassmorphism-light px-6 py-6 flex flex-col gap-4">
+                <Users className="w-8 h-8 text-secondary mb-3 mx-auto text-white" />
                 <div className="text-center">
                   <div className="text-3xl font-black text-secondary mb-1">
                     {playerCount}
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-muted-foreground text-white">
                     Players Joined
                   </div>
                 </div>
@@ -461,7 +475,7 @@ const Lobby = () => {
 
             {/* Game Progress */}
             <Card className="glass-panel p-6">
-              <h3 className="text-xl font-bold mb-4">📈 Game Progress</h3>
+              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">Game Progress</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span>Questions Completed:</span>
@@ -495,7 +509,7 @@ const Lobby = () => {
 
             {/* Game Status */}
             <Card className="glass-panel p-6">
-              <h3 className="text-xl font-bold mb-4">🎮 Game Status</h3>
+              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">Game Status</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span>Current Status:</span>
@@ -525,8 +539,8 @@ const Lobby = () => {
           <div className="lg:col-span-1 space-y-6">
             {/* Players List */}
             <Card className="glass-panel p-6">
-              <h3 className="text-xl font-bold mb-4">
-                👥 Players ({playerCount})
+              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">
+                Players ({playerCount})
               </h3>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {lobbyUsers.length > 0 ? (
@@ -574,7 +588,7 @@ const Lobby = () => {
 
             {/* Quick Info */}
             <Card className="glass-panel p-6">
-              <h3 className="text-xl font-bold mb-4">ℹ️ Quick Info</h3>
+              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">ℹ️ Quick Info</h3>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <p>• Wait for host to start questions</p>
                 <p>• Answer quickly for more points</p>
