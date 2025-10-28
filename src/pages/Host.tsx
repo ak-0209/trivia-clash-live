@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
+import dressingroom from "@/assets/dressingroom.webp";
 
 const Host = () => {
   const { toast } = useToast();
@@ -492,31 +493,27 @@ const Host = () => {
   const canStartQuestion = gameStatus === "waiting" || gameStatus === "results";
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="container mx-auto max-w-7xl">
+    <div 
+      className="hostpanel-container"
+      style={{
+        backgroundImage: `
+          linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.4)),
+          url(${dressingroom})
+        `,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+
+    >
+      <div className="hostpanel-wrapper">
         {/* Header */}
-        {/* Header with connection status */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl md:text-5xl font-black gradient-text mb-2">
-                HOST PANEL
-              </h1>
-              <div className="flex items-center gap-3">
-                <Badge
-                  variant={
-                    gameStatus === "active"
-                      ? "default"
-                      : gameStatus === "countdown"
-                      ? "secondary"
-                      : gameStatus === "paused"
-                      ? "secondary"
-                      : gameStatus === "results"
-                      ? "default"
-                      : "secondary"
-                  }
-                  className="text-sm"
-                >
+        <header className="hostpanel-header">
+          <div className="hostpanel-header-left flex flex-col items-center">
+            <div className="hostpanel-title leaguegothic">HOST PANEL</div>
+            <div className="flex flex-col gap-3">
+              <div className="status-row">
+                <div className="glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
                   {gameStatus === "active"
                     ? "🔴 LIVE"
                     : gameStatus === "countdown"
@@ -526,40 +523,41 @@ const Host = () => {
                     : gameStatus === "results"
                     ? "📊 RESULTS"
                     : "⏹️ WAITING"}
-                </Badge>
-                <span className="text-muted-foreground">
+                </div>
+                <span className="question-status">
                   Question {currentQuestion} / {totalQuestions}
                 </span>
                 {gameStatus === "countdown" && (
-                  <span className="text-2xl font-bold text-primary animate-pulse">
-                    {countdown}
-                  </span>
+                  <span className="countdown">{countdown}</span>
                 )}
               </div>
+              <div className="justify-center glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
+                {isConnected ? "🟢 CONNECTED" : "🔴 DISCONNECTED"}
+              </div>
             </div>
-
-            {/* Connection Status Badge */}
-            <Badge
-              variant={isConnected ? "default" : "destructive"}
-              className="text-sm"
-            >
-              {isConnected ? "🟢 CONNECTED" : "🔴 DISCONNECTED"}
-            </Badge>
           </div>
-        </div>
+        </header>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Column - Controls */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Stream Preview */}
-            <StreamView
-              youtubeUrl={currentStreamUrl}
-              isMuted={isStreamMuted}
-              onMuteToggle={handleStreamMuteToggle}
-              isHost={true}
-            />
-            <Card className="glass-panel p-6">
-              <h2 className="text-xl font-bold mb-4">🎥 Live Stream Manager</h2>
+        <div className="hostpanel-grid">
+          {/* LEFT COLUMN */}
+          <div className="left-column">
+            <Card className="glassmorphism-medium px-4 py-4 flex flex-col gap-4">
+              <h2 className="section-title text-4xl leaguegothic uppercase">Live Stream Manager</h2>
+              <div className="stream-grid flex flex-col gap-4">
+                <div className="flex flex-col gap-4">
+                  <h3>📡 Stream Source</h3>
+                  <StreamView
+                    youtubeUrl={currentStreamUrl}
+                    isMuted={isStreamMuted}
+                    onMuteToggle={handleStreamMuteToggle}
+                    isHost={true}
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
+              <h2 className="text-4xl leaguegothic uppercase">Live Stream Manager</h2>
 
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Stream URL Control */}
@@ -578,7 +576,7 @@ const Host = () => {
                     <Button
                       onClick={() => handleStreamUrlChange(currentStreamUrl)}
                       variant="hero"
-                      className="w-full"
+                      className="w-full glassmorphism-light flex items-center gap-2 text-white"
                     >
                       <Radio className="w-4 h-4 mr-2" />
                       Update Live Stream for Everyone
@@ -616,8 +614,8 @@ const Host = () => {
               </div>
 
               {/* 🆕 Stream Status */}
-              <div className="mt-4 p-3 bg-muted/30 rounded-lg">
-                <div className="flex items-center justify-between">
+              <div className="mt-4 p-3 bg-muted/30 rounded-lg glassmorphism-light flex items-center gap-2 text-white">
+                <div className="flex items-center justify-between flex-wrap gap-4" style={{flex:"1 0 0"}}>
                   <span className="text-sm font-medium">
                     Live Stream Status:
                   </span>
@@ -630,8 +628,8 @@ const Host = () => {
 
             {/* Question Controls */}
             {/* Question Controls */}
-            <Card className="glass-panel p-6">
-              <h2 className="text-xl font-bold mb-4">🎮 Question Controls</h2>
+            <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
+              <h2 className="text-4xl leaguegothic uppercase">Question Controls</h2>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-2">
@@ -639,7 +637,7 @@ const Host = () => {
                     variant="hero"
                     onClick={handleOpenStartModal}
                     disabled={!canStartQuestion}
-                    className="w-full"
+                    className="w-full glassmorphism-light flex items-center gap-2 text-white"
                   >
                     <Play className="w-4 h-4 mr-2" />
                     {currentQuestion === 0 ? "Start Game" : "Next Question"}
@@ -655,7 +653,7 @@ const Host = () => {
                   <Button
                     variant="destructive"
                     onClick={() => setShowEndGameModal(true)} // 🆕 CHANGED to open modal
-                    className="flex-1"
+                    className=""
                   >
                     End Game
                   </Button>
@@ -687,134 +685,84 @@ const Host = () => {
               </div>
             </Card>
 
-            {/* Current Question Display */}
-            <Card className="glass-panel p-6">
-              <h2 className="text-xl font-bold mb-4">
+            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h2 className="section-title">
                 📝{" "}
                 {currentQuestionData
                   ? `Question ${currentQuestion}`
                   : "No Question Active"}
               </h2>
-
               {currentQuestionData ? (
-                <div className="bg-muted/30 rounded-lg p-6">
-                  <p className="text-lg font-semibold mb-4">
+                <div className="question-box">
+                  <p className="question-text">
                     {currentQuestionData.text || currentQuestionData.question}
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(
-                      currentQuestionData.choices ||
+                  <div className="choice-grid">
+                    {(currentQuestionData.choices ||
                       currentQuestionData.options ||
                       []
-                    ).map((choice: string, index: number) => (
-                      <div
-                        key={index}
-                        className="p-3 bg-card/50 rounded border border-border"
-                      >
-                        {String.fromCharCode(65 + index)}. {choice}
+                    ).map((choice, i) => (
+                      <div key={i} className="choice-item">
+                        {String.fromCharCode(65 + i)}. {choice}
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Time Limit: {currentQuestionData.timeLimit}s</span>
+                  <div className="question-meta">
+                    <span>Time: {currentQuestionData.timeLimit}s</span>
                     <span>Points: {currentQuestionData.points}</span>
                   </div>
                 </div>
               ) : (
-                <div className="bg-muted/30 rounded-lg p-8 text-center">
-                  <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    No question active. Start a question to begin.
-                  </p>
+                <div className="empty-question">
+                  <Clock className="empty-icon" />
+                  <p>No question active. Start one to begin.</p>
                 </div>
               )}
             </Card>
           </div>
 
-          {/* Right Column - Stats */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Player Stats */}
-            <Card className="glass-panel p-6">
-              <h3 className="text-lg font-bold mb-4">👥 Player Stats</h3>
-
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">
-                      Total Players
-                    </span>
-                    <span className="font-bold">{playerCount}</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: "100%" }}
-                    />
-                  </div>
+          {/* RIGHT COLUMN */}
+          <div className="right-column">
+            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h3 className="section-title text-4xl leaguegothic uppercase">Player Stats</h3>
+              <div className="stat-block">
+                <div className="stat">
+                  <span>Total Players</span>
+                  <strong>{playerCount}</strong>
                 </div>
-
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">
-                      Answered
-                    </span>
-                    <span className="font-bold text-secondary">
-                      {answeredCount}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-secondary transition-all"
-                      style={{
-                        width: `${
-                          playerCount > 0
-                            ? (answeredCount / playerCount) * 100
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: "100%" }} />
                 </div>
-
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">
-                      Waiting
-                    </span>
-                    <span className="font-bold text-muted-foreground">
-                      {playerCount - answeredCount}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-muted-foreground transition-all"
-                      style={{
-                        width: `${
-                          playerCount > 0
-                            ? ((playerCount - answeredCount) / playerCount) *
-                              100
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
+              </div>
+              <div className="stat-block">
+                <div className="stat">
+                  <span>Answered</span>
+                  <strong>{answeredCount}</strong>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill secondary"
+                    style={{
+                      width: `${
+                        playerCount > 0
+                          ? (answeredCount / playerCount) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
                 </div>
               </div>
             </Card>
 
-            {/* Game Progress */}
-            <Card className="glass-panel p-6">
-              <h3 className="text-lg font-bold mb-4">📈 Game Progress</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Questions Completed:</span>
-                  <span className="font-bold">
-                    {currentQuestion} / {totalQuestions}
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
+            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h3 className="section-title text-4xl leaguegothic uppercase">Game Progress</h3>
+              <div className="progress-block">
+                <span>
+                  {currentQuestion} / {totalQuestions}
+                </span>
+                <div className="progress-bar">
                   <div
-                    className="bg-primary h-2 rounded-full transition-all"
+                    className="progress-fill"
                     style={{
                       width: `${
                         totalQuestions > 0
@@ -827,170 +775,16 @@ const Host = () => {
               </div>
             </Card>
 
-            {/* Quick Actions */}
-            <Card className="glass-panel p-6">
-              <h3 className="text-lg font-bold mb-4">⚡ Quick Actions</h3>
-              <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start"
-                >
-                  <Users className="w-4 h-4 mr-2" />
-                  View All Players
-                </Button>
-                {/* 🗑️ REMOVED duplicate "End Question Early" button */}
-              </div>
+            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h3 className="section-title text-4xl leaguegothic uppercase">Quick Actions</h3>
+              <Button variant="outline" size="sm">
+                <Users className="icon" />
+                View All Players
+              </Button>
             </Card>
           </div>
         </div>
       </div>
-
-      {/* Start Question Modal */}
-      {/* Start Question Modal */}
-      {/* Start Question Modal */}
-      <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl">
-              {currentQuestion === 0
-                ? "Start Game"
-                : currentQuestion >= totalQuestions - 1
-                ? "Final Question"
-                : "Next Question"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* 🆕 CHECK IF LAST QUESTION */}
-            {currentQuestion >= totalQuestions - 1 ? (
-              <div className="text-center">
-                <p className="text-lg font-semibold mb-4">
-                  🎯 This is the final question!
-                </p>
-                <Button
-                  onClick={handleStartImmediately}
-                  variant="hero"
-                  className="w-full py-6 text-lg bg-green-600 hover:bg-green-700"
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  Start Final Question
-                </Button>
-                <p className="text-sm text-muted-foreground mt-2">
-                  After this question, the game will end automatically
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Immediate Start Option */}
-                <div className="text-center">
-                  <Button
-                    onClick={handleStartImmediately}
-                    variant="hero"
-                    className="w-full py-6 text-lg"
-                  >
-                    <Play className="w-5 h-5 mr-2" />
-                    {currentQuestion === 0 ? "Start Game" : "Start Immediately"}
-                  </Button>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {currentQuestion === 0
-                      ? "Game will begin right away"
-                      : "Question will begin right away"}
-                  </p>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      Or start with countdown
-                    </span>
-                  </div>
-                </div>
-
-                {/* Countdown Option */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <Input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={countdownSeconds}
-                      onChange={(e) =>
-                        setCountdownSeconds(Number(e.target.value))
-                      }
-                      className="text-center text-lg font-semibold"
-                    />
-                    <span className="text-muted-foreground">seconds</span>
-                  </div>
-
-                  <Button
-                    onClick={handleStartWithCountdown}
-                    variant="outline"
-                    className="w-full py-6"
-                  >
-                    <Clock className="w-5 h-5 mr-2" />
-                    Start with {countdownSeconds}s Countdown
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* End Game Confirmation Modal */}
-      <Dialog open={showEndGameModal} onOpenChange={setShowEndGameModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl text-destructive">
-              🚨 End Game?
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="py-4">
-            <p className="text-center text-lg mb-2">
-              Are you sure you want to end the game?
-            </p>
-            <p className="text-center text-muted-foreground text-sm">
-              This will reset the lobby and disconnect all players. This action
-              cannot be undone.
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setShowEndGameModal(false)}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!socketRef.current) return;
-
-                socketRef.current.emit("host-end-game", "main-lobby");
-                setGameStatus("waiting");
-                setCurrentQuestion(0);
-                setCurrentQuestionData(null);
-                setShowEndGameModal(false);
-
-                toast({
-                  title: "Game Ended",
-                  description: "Game has been ended by host",
-                });
-              }}
-              className="flex-1"
-            >
-              Yes, End Game
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

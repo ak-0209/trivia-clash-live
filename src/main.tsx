@@ -3,5 +3,6 @@ import App from "./App.tsx";
 import "./index.css";
 import "./styles/fonts.css";
 import "./styles/home.css";
+import "./styles/host.css";
 
 createRoot(document.getElementById("root")!).render(<App />);

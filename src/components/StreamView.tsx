@@ -293,11 +293,11 @@ const StreamView = ({
 
   return (
     <Card className="glass-panel overflow-hidden border-2 border-red-500">
-      <div className="p-4 border-b border-border bg-red-600 text-white">
-        <div className="flex items-center justify-between">
+      <div className="p-4 border-b border-border bg-white-600 text-white">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <Radio className="w-5 h-5 animate-pulse" />
-            <h2 className="text-xl font-bold">🔴 LIVE STREAM</h2>
+            <h2 className="text-2xl leaguegothic">🔴 LIVE STREAM</h2>
           </div>
           <div className="flex items-center gap-2">
             {isHost && (
@@ -305,7 +305,7 @@ const StreamView = ({
                 variant="secondary"
                 size="sm"
                 onClick={handleHostMuteToggle}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30"
+                className="glassmorphism-light flex items-center gap-2 text-white"
               >
                 {currentMuted ? (
                   <VolumeX className="w-4 h-4" />
@@ -319,7 +319,7 @@ const StreamView = ({
               variant="secondary"
               size="sm"
               onClick={handleRefresh}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30"
+              className="glassmorphism-light flex items-center gap-2 text-white"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -328,7 +328,7 @@ const StreamView = ({
         </div>
       </div>
 
-      <div className="relative aspect-video bg-black">
+      <div className="relative bg-black" style={{height:"400px"}}>
         {/* Loading overlay - only show if loading AND not playing */}
         {loading && !isPlaying && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 text-white">
@@ -375,7 +375,7 @@ const StreamView = ({
         <div ref={containerRef} className="w-full h-full relative z-10" />
       </div>
 
-      <div className="p-3 bg-red-500 text-white border-t border-red-600">
+      <div className="p-3 bg-white-500 text-white border-t border-white-600">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="bg-white text-red-600">
