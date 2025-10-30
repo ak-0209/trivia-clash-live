@@ -22,16 +22,10 @@ console.log("JWT_SECRET present:", Boolean(process.env.JWT_SECRET));
 
 const app = express();
 
-const isProduction = process.env.NODE_ENV === "production";
-
-const frontendUrl = isProduction
-  ? process.env.FRONTEND_URL
-  : "http://localhost:8080";
-
 // Configure CORS properly for credentials
 app.use(
   cors({
-    origin: frontendUrl,
+    origin: process.env.FRONTEND_URL || "http://localhost:8080",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -39,6 +33,13 @@ app.use(
 );
 
 app.use(express.json());
+
+// 🆕 ADD THESE ROUTE IMPORTS
+import lobbyRoutes from "./routes/lobby";
+import questionRoutes from "./routes/questionRoutes";
+// 🆕 MOUNT THE ROUTES
+app.use("/api/lobbies", lobbyRoutes);
+app.use("/api/questions", questionRoutes);
 
 app.get("/health", (_req: express.Request, res: express.Response) =>
   res.json({ status: "ok" }),
@@ -49,12 +50,9 @@ const PORT = process.env.PORT || 3000;
 // MongoDB connection function
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI;
-
-    if (!mongoUri) {
-      console.error("❌ MONGO_URI is not defined in environment");
-      process.exit(1);
-    }
+    // Use MONGO_URI from your .env file
+    const mongoUri =
+      process.env.MONGO_URI || "mongodb://localhost:27017/liveTrivia";
 
     console.log("Connecting to MongoDB...");
     await mongoose.connect(mongoUri, {
