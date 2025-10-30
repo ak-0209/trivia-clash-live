@@ -101,7 +101,7 @@ export default function AuthPage() {
     { emailId: string; password: string }
   >({
     mutationFn: async ({ emailId, password }) => {
-      const resp = await fetch(SIGNUP_URL, {
+      const resp = await fetch(SIGNIN_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
