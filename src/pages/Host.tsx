@@ -197,9 +197,8 @@ const Host = () => {
     const fetchCurrentLobbyState = async () => {
       try {
         const token = localStorage.getItem("jwtToken");
-        const baseURL = import.meta.env.VITE_API_URL;
 
-        const response = await fetch(`${baseURL}/api/lobbies/main-lobby`, {
+        const response = await fetch(`/api/lobbies/main-lobby`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -240,9 +239,9 @@ const Host = () => {
   const fetchTotalQuestions = async () => {
     try {
       const token = localStorage.getItem("jwtToken");
-      const baseURL = import.meta.env.VITE_API_URL;
 
-      const response = await fetch(`${baseURL}/api/lobbies/main-lobby`, {
+      // 🆕 USE RELATIVE PATH (remove baseURL)
+      const response = await fetch("/api/questions/total", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
