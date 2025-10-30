@@ -29,7 +29,8 @@ type SignupResponse = {
 };
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
-console.log("Using SIGNUP_URL:", SIGNUP_URL);
+
+const SIGNIN_URL = import.meta.env.VITE_SIGNIN_URL;
 
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("signup");
