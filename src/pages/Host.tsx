@@ -784,6 +784,149 @@ const Host = () => {
             </Card>
           </div>
         </div>
+
+        <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl">
+                {currentQuestion === 0
+                  ? "Start Game"
+                  : currentQuestion >= totalQuestions - 1
+                  ? "Final Question"
+                  : "Next Question"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* 🆕 CHECK IF LAST QUESTION */}
+              {currentQuestion >= totalQuestions - 1 ? (
+                <div className="text-center">
+                  <p className="text-lg font-semibold mb-4">
+                    🎯 This is the final question!
+                  </p>
+                  <Button
+                    onClick={handleStartImmediately}
+                    variant="hero"
+                    className="w-full py-6 glassmorphism-light flex items-center gap-2 text-white"
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    Start Final Question
+                  </Button>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    After this question, the game will end automatically
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Immediate Start Option */}
+                  <div className="text-center">
+                    <Button
+                      onClick={handleStartImmediately}
+                      variant="hero"
+                      className="w-full py-6 text-lg glassmorphism-light flex items-center gap-2 text-white"
+                    >
+                      <Play className="w-5 h-5 mr-2" />
+                      {currentQuestion === 0 ? "Start Game" : "Start Immediately"}
+                    </Button>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {currentQuestion === 0
+                        ? "Game will begin right away"
+                        : "Question will begin right away"}
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Or start with countdown
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Countdown Option */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={countdownSeconds}
+                        onChange={(e) =>
+                          setCountdownSeconds(Number(e.target.value))
+                        }
+                        className="text-center text-lg font-semibold"
+                      />
+                      <span className="text-muted-foreground">seconds</span>
+                    </div>
+
+                    <Button
+                      onClick={handleStartWithCountdown}
+                      variant="outline"
+                      className="w-full py-6"
+                    >
+                      <Clock className="w-5 h-5 mr-2" />
+                      Start with {countdownSeconds}s Countdown
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* End Game Confirmation Modal */}
+        <Dialog open={showEndGameModal} onOpenChange={setShowEndGameModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl text-destructive">
+                🚨 End Game?
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-4">
+              <p className="text-center text-lg mb-2">
+                Are you sure you want to end the game?
+              </p>
+              <p className="text-center text-muted-foreground text-sm">
+                This will reset the lobby and disconnect all players. This action
+                cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowEndGameModal(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (!socketRef.current) return;
+
+                  socketRef.current.emit("host-end-game", "main-lobby");
+                  setGameStatus("waiting");
+                  setCurrentQuestion(0);
+                  setCurrentQuestionData(null);
+                  setShowEndGameModal(false);
+
+                  toast({
+                    title: "Game Ended",
+                    description: "Game has been ended by host",
+                  });
+                }}
+                className="flex-1"
+              >
+                Yes, End Game
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
