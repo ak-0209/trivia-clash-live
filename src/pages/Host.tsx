@@ -49,6 +49,14 @@ const Host = () => {
       "https://www.youtube.com/embed/YDvsBbKfLPA",
   );
 
+  const API_BASE = import.meta.env.VITE_API_URL;
+
+  function joinUrl(base: string, path: string) {
+    const _base = base.replace(/\/+$/, "");
+    const _path = path.replace(/^\/+/, "");
+    return _base ? `${_base}/${_path}` : `/${_path}`;
+  }
+
   // Connect to WebSocket
   // Connect to WebSocket and restore state
   useEffect(() => {
@@ -197,35 +205,40 @@ const Host = () => {
     const fetchCurrentLobbyState = async () => {
       try {
         const token = localStorage.getItem("jwtToken");
+        const url = joinUrl(API_BASE, "/lobbies/main-lobby");
 
-        const response = await fetch(`/api/lobbies/main-lobby`, {
+        const response = await fetch(url, {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: token ? `Bearer ${token}` : "",
             "Content-Type": "application/json",
           },
+          // credentials: "include" // uncomment if you rely on cookies
         });
 
-        if (response.ok) {
-          const lobbyData = await response.json();
-          console.log("Fetched current lobby state:", lobbyData);
+        if (!response.ok) {
+          console.error(
+            `Failed to fetch lobby state: ${response.status} ${response.statusText}`,
+          );
+          return;
+        }
 
-          // 🆕 ALWAYS update state with current lobby data, even in waiting state
-          if (lobbyData) {
-            setPlayerCount(lobbyData.playerCount || 0);
-            setCurrentQuestion(lobbyData.currentQuestionIndex || 0); // 🆕 CRITICAL: Always restore question index
+        const lobbyData = await response.json();
+        console.log("Fetched current lobby state:", lobbyData);
 
-            // 🆕 UPDATED status mapping (no more "results" state)
-            if (lobbyData.status === "countdown") {
-              setGameStatus("countdown");
-            } else if (lobbyData.status === "in-progress") {
-              setGameStatus("active");
-            } else {
-              setGameStatus("waiting"); // 🆕 Everything else is "waiting"
-            }
+        if (lobbyData) {
+          setPlayerCount(lobbyData.playerCount || 0);
+          setCurrentQuestion(lobbyData.currentQuestionIndex || 0);
 
-            if (lobbyData.currentQuestion) {
-              setCurrentQuestionData(lobbyData.currentQuestion);
-            }
+          if (lobbyData.status === "countdown") {
+            setGameStatus("countdown");
+          } else if (lobbyData.status === "in-progress") {
+            setGameStatus("active");
+          } else {
+            setGameStatus("waiting");
+          }
+
+          if (lobbyData.currentQuestion) {
+            setCurrentQuestionData(lobbyData.currentQuestion);
           }
         }
       } catch (error) {
@@ -239,19 +252,23 @@ const Host = () => {
   const fetchTotalQuestions = async () => {
     try {
       const token = localStorage.getItem("jwtToken");
+      const url = joinUrl(API_BASE, "/questions/total");
 
-      // 🆕 USE RELATIVE PATH (remove baseURL)
-      const response = await fetch("/api/questions/total", {
+      const response = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : "",
         },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setTotalQuestions(data.totalQuestions || data.count || 0);
+        setTotalQuestions(data.totalQuestions ?? data.count ?? 0);
       } else {
-        console.error("Failed to fetch total questions");
+        console.error(
+          "Failed to fetch total questions:",
+          response.status,
+          response.statusText,
+        );
         setTotalQuestions(10); // fallback
       }
     } catch (error) {
