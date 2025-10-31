@@ -29,7 +29,8 @@ type SignupResponse = {
 };
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
-console.log("Using SIGNUP_URL:", SIGNUP_URL);
+
+const SIGNIN_URL = import.meta.env.VITE_SIGNIN_URL;
 
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("signup");
@@ -49,7 +50,7 @@ export default function AuthPage() {
   const signupMutation = useMutation<SignupResponse, any, SignupPayload>({
     mutationFn: async (payload: SignupPayload) => {
       // use the payload passed by mutateAsync instead of outer state
-      const resp = await fetch("/api/auth/triviasignup", {
+      const resp = await fetch(SIGNUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // if you need cookies from auth server, add: credentials: "include",
@@ -100,7 +101,7 @@ export default function AuthPage() {
     { emailId: string; password: string }
   >({
     mutationFn: async ({ emailId, password }) => {
-      const resp = await fetch("/api/auth/trivia-signin", {
+      const resp = await fetch(SIGNIN_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -332,11 +333,17 @@ export default function AuthPage() {
 
           {/* Credentials Form */}
           {step === "credentials" ? (
-            <form onSubmit={handleSubmitCredentials} className="space-y-5 inter">
+            <form
+              onSubmit={handleSubmitCredentials}
+              className="space-y-5 inter"
+            >
               {mode === "signup" && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-sm font-medium text-white">
+                    <Label
+                      htmlFor="firstName"
+                      className="text-sm font-medium text-white"
+                    >
                       First Name
                     </Label>
                     <Input
@@ -352,7 +359,10 @@ export default function AuthPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-sm font-medium text-white">
+                    <Label
+                      htmlFor="lastName"
+                      className="text-sm font-medium text-white"
+                    >
                       Last Name
                     </Label>
                     <Input
@@ -371,7 +381,10 @@ export default function AuthPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-white">
+                <Label
+                  htmlFor="email"
+                  className="text-sm font-medium text-white"
+                >
                   Email
                 </Label>
                 <Input
@@ -389,7 +402,10 @@ export default function AuthPage() {
 
               {mode === "signin" && (
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-white">
+                  <Label
+                    htmlFor="password"
+                    className="text-sm font-medium text-white"
+                  >
                     Password
                   </Label>
                   <Input
@@ -421,13 +437,15 @@ export default function AuthPage() {
                   "Continue"
                 )}
               </Button>
-
             </form>
           ) : (
             // Verification Form
             <form onSubmit={handleVerifyCode} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="code" className="text-sm font-medium text-white">
+                <Label
+                  htmlFor="code"
+                  className="text-sm font-medium text-white"
+                >
                   Verification Code
                 </Label>
                 <Input
@@ -477,11 +495,19 @@ export default function AuthPage() {
             </form>
           )}
           <p className="text-xs text-white/70 mt-2 text-center">
-            You can use your <span className="underline font-medium cursor-pointer text-white" onClick={() => window.open("https://topclubfantasy.com/", "_blank")}>Topclub Fantasy</span> credentials to <strong className="text-white">Sign In</strong>.
+            You can use your{" "}
+            <span
+              className="underline font-medium cursor-pointer text-white"
+              onClick={() =>
+                window.open("https://topclubfantasy.com/", "_blank")
+              }
+            >
+              Topclub Fantasy
+            </span>{" "}
+            credentials to <strong className="text-white">Sign In</strong>.
           </p>
         </div>
       </div>
     </div>
-
   );
 }

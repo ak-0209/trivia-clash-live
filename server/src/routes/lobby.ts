@@ -1,8 +1,8 @@
-const _express = require("express");
-const router = _express.Router();
+import express from "express";
+import { getLobby } from "../controllers/lobbyController";
 
-const { getLobby } = require("../controllers/lobbyController");
+const router = express.Router();
 
 router.get("/:lobbyId", getLobby);
 
-module.exports = router;
+export default router;

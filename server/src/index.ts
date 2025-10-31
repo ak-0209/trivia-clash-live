@@ -7,6 +7,8 @@ import TriviaSocket from "./socket/triviaSocket";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import lobbyRoutes from "./routes/lobby";
+import questionRoutes from "./routes/questionRoutes";
 
 const rootEnv = path.resolve(process.cwd(), ".env"); // repo root .env
 const serverEnv = path.resolve(process.cwd(), "server/.env"); // server/.env if you keep it there
@@ -34,7 +36,18 @@ app.use(
 
 app.use(express.json());
 
-app.get("/health", (_req: express.Request, res: express.Response) =>
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// 🆕 ADD THESE ROUTE IMPORTS
+
+// 🆕 MOUNT THE ROUTES
+app.use("/api/lobbies", lobbyRoutes);
+app.use("/api/questions", questionRoutes);
+
+app.get("/api/health", (_req: express.Request, res: express.Response) =>
   res.json({ status: "ok" }),
 );
 

@@ -49,6 +49,14 @@ const Host = () => {
       "https://www.youtube.com/embed/YDvsBbKfLPA",
   );
 
+  const API_BASE = import.meta.env.VITE_API_URL;
+
+  function joinUrl(base: string, path: string) {
+    const _base = base.replace(/\/+$/, "");
+    const _path = path.replace(/^\/+/, "");
+    return _base ? `${_base}/${_path}` : `/${_path}`;
+  }
+
   // Connect to WebSocket
   // Connect to WebSocket and restore state
   useEffect(() => {
@@ -193,40 +201,44 @@ const Host = () => {
     };
   }, [toast]);
 
-  // 🆕 Add this function to fetch current lobby state on mount
-  // 🆕 Add this function to fetch current lobby state on mount
-  // 🆕 Add this function to fetch current lobby state on mount
   useEffect(() => {
     const fetchCurrentLobbyState = async () => {
       try {
         const token = localStorage.getItem("jwtToken");
-        const response = await fetch("/api/lobbies/main-lobby", {
+        const url = joinUrl(API_BASE, "/lobbies/main-lobby");
+
+        const response = await fetch(url, {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: token ? `Bearer ${token}` : "",
+            "Content-Type": "application/json",
           },
+          // credentials: "include" // uncomment if you rely on cookies
         });
 
-        if (response.ok) {
-          const lobbyData = await response.json();
-          console.log("Fetched current lobby state:", lobbyData);
+        if (!response.ok) {
+          console.error(
+            `Failed to fetch lobby state: ${response.status} ${response.statusText}`,
+          );
+          return;
+        }
 
-          // 🆕 ALWAYS update state with current lobby data, even in waiting state
-          if (lobbyData) {
-            setPlayerCount(lobbyData.playerCount || 0);
-            setCurrentQuestion(lobbyData.currentQuestionIndex || 0); // 🆕 CRITICAL: Always restore question index
+        const lobbyData = await response.json();
+        console.log("Fetched current lobby state:", lobbyData);
 
-            // 🆕 UPDATED status mapping (no more "results" state)
-            if (lobbyData.status === "countdown") {
-              setGameStatus("countdown");
-            } else if (lobbyData.status === "in-progress") {
-              setGameStatus("active");
-            } else {
-              setGameStatus("waiting"); // 🆕 Everything else is "waiting"
-            }
+        if (lobbyData) {
+          setPlayerCount(lobbyData.playerCount || 0);
+          setCurrentQuestion(lobbyData.currentQuestionIndex || 0);
 
-            if (lobbyData.currentQuestion) {
-              setCurrentQuestionData(lobbyData.currentQuestion);
-            }
+          if (lobbyData.status === "countdown") {
+            setGameStatus("countdown");
+          } else if (lobbyData.status === "in-progress") {
+            setGameStatus("active");
+          } else {
+            setGameStatus("waiting");
+          }
+
+          if (lobbyData.currentQuestion) {
+            setCurrentQuestionData(lobbyData.currentQuestion);
           }
         }
       } catch (error) {
@@ -240,17 +252,23 @@ const Host = () => {
   const fetchTotalQuestions = async () => {
     try {
       const token = localStorage.getItem("jwtToken");
-      const response = await fetch("/api/questions/total", {
+      const url = joinUrl(API_BASE, "/questions/total");
+
+      const response = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : "",
         },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setTotalQuestions(data.totalQuestions || data.count || 0);
+        setTotalQuestions(data.totalQuestions ?? data.count ?? 0);
       } else {
-        console.error("Failed to fetch total questions");
+        console.error(
+          "Failed to fetch total questions:",
+          response.status,
+          response.statusText,
+        );
         setTotalQuestions(10); // fallback
       }
     } catch (error) {
@@ -493,7 +511,7 @@ const Host = () => {
   const canStartQuestion = gameStatus === "waiting" || gameStatus === "results";
 
   return (
-    <div 
+    <div
       className="hostpanel-container"
       style={{
         backgroundImage: `
@@ -504,7 +522,6 @@ const Host = () => {
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
       }}
-
     >
       <div className="hostpanel-wrapper">
         {/* Header */}
@@ -542,7 +559,9 @@ const Host = () => {
           {/* LEFT COLUMN */}
           <div className="left-column">
             <Card className="glassmorphism-medium px-4 py-4 flex flex-col gap-4">
-              <h2 className="section-title text-4xl leaguegothic uppercase">Live Stream Manager</h2>
+              <h2 className="section-title text-4xl leaguegothic uppercase">
+                Live Stream Manager
+              </h2>
               <div className="stream-grid flex flex-col gap-4">
                 <div className="flex flex-col gap-4">
                   <h3>📡 Stream Source</h3>
@@ -557,7 +576,9 @@ const Host = () => {
             </Card>
 
             <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
-              <h2 className="text-4xl leaguegothic uppercase">Live Stream Manager</h2>
+              <h2 className="text-4xl leaguegothic uppercase">
+                Live Stream Manager
+              </h2>
 
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Stream URL Control */}
@@ -615,7 +636,10 @@ const Host = () => {
 
               {/* 🆕 Stream Status */}
               <div className="mt-4 p-3 bg-muted/30 rounded-lg glassmorphism-light flex items-center gap-2 text-white">
-                <div className="flex items-center justify-between flex-wrap gap-4" style={{flex:"1 0 0"}}>
+                <div
+                  className="flex items-center justify-between flex-wrap gap-4"
+                  style={{ flex: "1 0 0" }}
+                >
                   <span className="text-sm font-medium">
                     Live Stream Status:
                   </span>
@@ -629,7 +653,9 @@ const Host = () => {
             {/* Question Controls */}
             {/* Question Controls */}
             <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
-              <h2 className="text-4xl leaguegothic uppercase">Question Controls</h2>
+              <h2 className="text-4xl leaguegothic uppercase">
+                Question Controls
+              </h2>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-2">
@@ -698,7 +724,8 @@ const Host = () => {
                     {currentQuestionData.text || currentQuestionData.question}
                   </p>
                   <div className="choice-grid">
-                    {(currentQuestionData.choices ||
+                    {(
+                      currentQuestionData.choices ||
                       currentQuestionData.options ||
                       []
                     ).map((choice, i) => (
@@ -724,7 +751,9 @@ const Host = () => {
           {/* RIGHT COLUMN */}
           <div className="right-column">
             <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h3 className="section-title text-4xl leaguegothic uppercase">Player Stats</h3>
+              <h3 className="section-title text-4xl leaguegothic uppercase">
+                Player Stats
+              </h3>
               <div className="stat-block">
                 <div className="stat">
                   <span>Total Players</span>
@@ -755,7 +784,9 @@ const Host = () => {
             </Card>
 
             <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h3 className="section-title text-4xl leaguegothic uppercase">Game Progress</h3>
+              <h3 className="section-title text-4xl leaguegothic uppercase">
+                Game Progress
+              </h3>
               <div className="progress-block">
                 <span>
                   {currentQuestion} / {totalQuestions}
@@ -776,7 +807,9 @@ const Host = () => {
             </Card>
 
             <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h3 className="section-title text-4xl leaguegothic uppercase">Quick Actions</h3>
+              <h3 className="section-title text-4xl leaguegothic uppercase">
+                Quick Actions
+              </h3>
               <Button variant="outline" size="sm">
                 <Users className="icon" />
                 View All Players
