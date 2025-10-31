@@ -447,6 +447,7 @@ const Host = () => {
     socketRef.current.emit("host-end-game", "main-lobby");
     setGameStatus("waiting");
     setCurrentQuestion(0);
+    setPlayerCount(0);
     setCurrentQuestionData(null);
 
     toast({

@@ -1093,38 +1093,30 @@ class TriviaSocket {
 
   private async endGame(lobbyId: string) {
     try {
-      // 🆕 CLEAR TIMERS FIRST
-      this.clearLobbyTimers(lobbyId);
-
-      const lobby = await this.getLobby(lobbyId);
+      const lobby = await Lobby.findOne({ id: lobbyId });
       if (!lobby) return;
 
-      const leaderboard = lobby.players
-        .sort((a, b) => b.score - a.score)
-        .map((p) => ({
-          userId: p.userId,
-          name: p.name,
-          score: p.score,
-        }));
+      // Remove all players from the lobby
+      lobby.players = [];
 
-      const updatedLobby = await this.updateLobby(lobbyId, {
-        status: "completed",
-        gameState: "lobby",
-      });
+      lobby.status = "waiting";
+      lobby.currentQuestion = null;
+      lobby.currentQuestionIndex = 0;
 
-      if (!updatedLobby) return;
+      await lobby.save();
 
+      // Notify all players that the game has ended and they've been removed
       this.io.to(lobbyId).emit("lobby-update", {
         type: "game-ended",
         data: {
-          leaderboard,
-          winner: leaderboard[0],
+          message: "Game ended by host",
+          lobby: lobby,
         },
       });
 
-      setTimeout(() => {
-        this.resetLobby(lobbyId);
-      }, 10000);
+      console.log(
+        `🎮 Game ended by host, all players removed from lobby ${lobbyId}`,
+      );
     } catch (error) {
       console.error("Error ending game:", error);
     }
