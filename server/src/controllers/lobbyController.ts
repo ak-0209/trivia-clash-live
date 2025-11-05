@@ -45,3 +45,46 @@ export const getLobby = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const getLeaderboard = async (req: Request, res: Response) => {
+  try {
+    const { lobbyId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const authHeader = req.headers.authorization as string | undefined;
+    const token = authHeader?.replace("Bearer ", "");
+
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    // verify token
+    verify(token, process.env.JWT_SECRET || "fallback-secret");
+
+    const lobby = await Lobby.findOne({ id: lobbyId }).exec();
+    if (!lobby) {
+      return res.status(404).json({ error: "Lobby not found" });
+    }
+
+    // Sort players by score descending
+    const sortedPlayers = [...lobby.players]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((player, index) => ({
+        rank: index + 1,
+        userId: player.userId,
+        name: player.name,
+        score: player.score,
+        hasAnsweredCurrentQuestion: player.hasAnsweredCurrentQuestion,
+        lastAnswerCorrect: player.lastAnswerCorrect,
+      }));
+
+    return res.json({
+      lobbyId: lobby.id,
+      leaderboard: sortedPlayers,
+    });
+  } catch (error) {
+    console.error("Error fetching leaderboard:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};

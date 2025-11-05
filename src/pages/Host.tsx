@@ -24,6 +24,12 @@ import {
 import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
 import dressingroom from "@/assets/dressingroom.webp";
 
+export function joinUrl(base: string, path: string) {
+  const _base = base.replace(/\/+$/, "");
+  const _path = path.replace(/^\/+/, "");
+  return _base ? `${_base}/${_path}` : `/${_path}`;
+}
+
 const Host = () => {
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
@@ -50,12 +56,6 @@ const Host = () => {
   );
 
   const API_BASE = import.meta.env.VITE_API_URL;
-
-  function joinUrl(base: string, path: string) {
-    const _base = base.replace(/\/+$/, "");
-    const _path = path.replace(/^\/+/, "");
-    return _base ? `${_base}/${_path}` : `/${_path}`;
-  }
 
   // Connect to WebSocket
   // Connect to WebSocket and restore state
