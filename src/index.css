@@ -153,18 +153,18 @@
 
 .glassmorphism-light {
   border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(46, 46, 46, 0.014);
+  background: rgba(46, 46, 46, 0.014) !important;
   backdrop-filter: blur(11.399999618530273px);
 }
 
 .glassmorphism-medium {
   border: 1px solid rgba(255, 255, 255, 0.027);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(11.100000381469727px);
 }
 
 .glassmorphism-dark {
   border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(22, 22, 22, 0.24);
+  background: rgba(22, 22, 22, 0.24) !important;
   backdrop-filter: blur(11.399999618530273px);
 }

@@ -380,59 +380,60 @@ const Lobby = () => {
 
             {/* QUESTION OVERLAY - APPEARS WHEN ACTIVE */}
             {lobbyStatus === "active" && currentQuestion && (
-              <Card className="glass-panel border-4 border-yellow-400 bg-gradient-to-br from-blue-900 to-purple-900">
+              <Card className="glassmorphism-medium border-4 shadow-xl rounded-2xl">
                 <div className="p-6">
-                  <div className="text-center mb-4">
+                  {/* Question Header */}
+                  <div className="text-center mb-6">
                     <Badge
                       variant="secondary"
-                      className="mb-2 bg-yellow-400 text-black text-lg"
+                      className="mb-3 bg-yellow-400 text-black text-lg px-4 py-2 rounded-full"
                     >
-                      Question {currentQuestionIndex} • {currentQuestion.points}{" "}
-                      Points
+                      Question {currentQuestionIndex} • {currentQuestion.points} Points
                     </Badge>
-                    <h3 className="text-2xl font-bold text-white">
+
+                    <h3 className="text-2xl font-bold text-white leading-snug break-words">
                       {currentQuestion.text || currentQuestion.question}
                     </h3>
-                    <div className="text-yellow-300 mt-2">
-                      Time Limit: {currentQuestion.timeLimit}s
+
+                    <div className="text-yellow-300 mt-2 font-medium">
+                      ⏱ Time Limit: {currentQuestion.timeLimit}s
                     </div>
                   </div>
 
                   {/* Answer Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {(
-                      currentQuestion.choices ||
+                  <div className="flex flex-col gap-4">
+                    {(currentQuestion.choices ||
                       currentQuestion.options ||
                       []
                     ).map((choice: string, index: number) => (
                       <Button
                         key={index}
-                        variant={
-                          selectedAnswer === choice ? "default" : "outline"
-                        }
-                        className={`h-16 text-lg font-medium ${
-                          selectedAnswer === choice
-                            ? "bg-green-600 hover:bg-green-700 text-white"
-                            : "bg-blue-800 hover:bg-blue-700 text-white"
-                        }`}
-                        onClick={() =>
-                          !hasAnswered && handleAnswerSubmit(choice)
-                        }
+                        variant={selectedAnswer === choice ? "default" : "outline"}
+                        className={`flex items-start justify-start text-left px-4 py-3 text-base sm:text-lg font-medium rounded-xl transition-all duration-200 glassmorphism-light text-white`}
+                        onClick={() => !hasAnswered && handleAnswerSubmit(choice)}
                         disabled={hasAnswered}
                       >
-                        <span className="mr-2 font-bold">
+                        <span className="mr-3 font-bold text-yellow-300 flex-shrink-0">
                           {String.fromCharCode(65 + index)}.
                         </span>
-                        {choice}
+
+                        <span
+                          className="text-white flex-1 break-all whitespace-normal leading-snug overflow-hidden text-wrap"
+                        >
+                          {choice}
+                        </span>
+
                       </Button>
+
                     ))}
                   </div>
 
+                  {/* Submitted Answer */}
                   {hasAnswered && (
-                    <div className="text-center mt-4">
+                    <div className="text-center mt-6">
                       <Badge
                         variant="secondary"
-                        className="bg-green-600 text-white text-lg px-4 py-2"
+                        className="glassmorphism-light text-white text-lg px-4 py-3 rounded-md"
                       >
                         ✅ Answer Submitted: "{selectedAnswer}"
                       </Badge>
