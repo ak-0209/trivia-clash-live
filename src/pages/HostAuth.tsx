@@ -8,8 +8,9 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
-// Use the same pattern as AuthPage with environment variable
-const HOST_SIGNIN_URL = import.meta.env.VITE_SIGNIN_URL + "?host=true";
+// Fix the URL - remove the double slash and use proper query parameter format
+const HOST_SIGNIN_URL =
+  "https://topclubfantasy.com/api/auth/trivia-signin?host=true";
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");
@@ -24,6 +25,7 @@ export default function HostAuthPage() {
     { emailId: string; password: string }
   >({
     mutationFn: async ({ emailId, password }) => {
+      console.log("Sending request to:", HOST_SIGNIN_URL);
       const resp = await fetch(HOST_SIGNIN_URL, {
         method: "POST",
         headers: {
@@ -32,6 +34,8 @@ export default function HostAuthPage() {
         credentials: "include",
         body: JSON.stringify({ emailId, password }),
       });
+
+      console.log("Response status:", resp.status);
 
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
