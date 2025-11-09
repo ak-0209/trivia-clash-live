@@ -60,7 +60,7 @@ const Host = () => {
   // Connect to WebSocket
   // Connect to WebSocket and restore state
   useEffect(() => {
-    const token = localStorage.getItem("jwtToken");
+    const token = localStorage.getItem("hostJwtToken");
     if (!token) {
       toast({
         title: "Authentication Error",
@@ -204,7 +204,7 @@ const Host = () => {
   useEffect(() => {
     const fetchCurrentLobbyState = async () => {
       try {
-        const token = localStorage.getItem("jwtToken");
+        const token = localStorage.getItem("hostJwtToken");
         const url = joinUrl(API_BASE, "/lobbies/main-lobby");
 
         const response = await fetch(url, {
@@ -251,7 +251,7 @@ const Host = () => {
 
   const fetchTotalQuestions = async () => {
     try {
-      const token = localStorage.getItem("jwtToken");
+      const token = localStorage.getItem("hostJwtToken");
       const url = joinUrl(API_BASE, "/questions/total");
 
       const response = await fetch(url, {
@@ -860,7 +860,9 @@ const Host = () => {
                       className="w-full py-6 text-lg glassmorphism-light flex items-center gap-2 text-white"
                     >
                       <Play className="w-5 h-5 mr-2" />
-                      {currentQuestion === 0 ? "Start Game" : "Start Immediately"}
+                      {currentQuestion === 0
+                        ? "Start Game"
+                        : "Start Immediately"}
                     </Button>
                     <p className="text-sm text-muted-foreground mt-2">
                       {currentQuestion === 0
@@ -925,8 +927,8 @@ const Host = () => {
                 Are you sure you want to end the game?
               </p>
               <p className="text-center text-muted-foreground text-sm">
-                This will reset the lobby and disconnect all players. This action
-                cannot be undone.
+                This will reset the lobby and disconnect all players. This
+                action cannot be undone.
               </p>
             </div>
 
