@@ -10,6 +10,7 @@ import Host from "./pages/Host";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import NotFound from "./pages/NotFound";
 import AuthPage from "./pages/AuthPage";
+import HostAuthPage from "./pages/HostAuth";
 
 const queryClient = new QueryClient();
 
@@ -26,7 +27,7 @@ const App = () => (
           <Route path="/game" element={<Game />} />
           <Route path="/host" element={<Host />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/host-auth" element={<HostAuthPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

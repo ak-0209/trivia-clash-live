@@ -24,13 +24,28 @@ const Index = () => {
         <div className="relative z-20 container mx-auto px-4 text-center">
           <div className="herosection">
             <div className="l1 leaguegothic">TOPCLUB LIVE TRIVIA</div>
-            <div className="l2 leaguegothic">Compete in Real-Time. Win Real Money.</div>
-            <div className="l3">Join thousands of players in live trivia games with cash prizes. 30 minutes of intense competition.</div>
+            <div className="l2 leaguegothic">
+              Compete in Real-Time. Win Real Money.
+            </div>
+            <div className="l3">
+              Join thousands of players in live trivia games with cash prizes.
+              30 minutes of intense competition.
+            </div>
           </div>
 
           <div className="hero_bt">
-            <div className="bt1 leaguegothic cursor-pointer" onClick={() => navigate("/auth")}>JOIN NEXT MATCH</div>
-            <div className="bt2 leaguegothic cursor-pointer" onClick={() => navigate("/host")}>HOST PANEL</div>
+            <div
+              className="bt1 leaguegothic cursor-pointer"
+              onClick={() => navigate("/auth")}
+            >
+              JOIN NEXT MATCH
+            </div>
+            <div
+              className="bt2 leaguegothic cursor-pointer"
+              onClick={() => navigate("/host-auth")}
+            >
+              HOST PANEL
+            </div>
           </div>
 
           {/* Feature Cards */}
@@ -38,21 +53,29 @@ const Index = () => {
             <div className="card-info glassmorphism-light">
               <h3 className="text-white leaguegothic card-header">Win Big</h3>
               <p className="text-white/70 inter card-desc">
-                Every correct answer boosts you up the ranks. Battle for a top spot and secure a bigger piece of the prize pool.
+                Every correct answer boosts you up the ranks. Battle for a top
+                spot and secure a bigger piece of the prize pool.
               </p>
             </div>
 
             <div className="card-info glassmorphism-light">
-              <h3 className="text-white leaguegothic card-header">Real-Time Action</h3>
+              <h3 className="text-white leaguegothic card-header">
+                Real-Time Action
+              </h3>
               <p className="text-white/70 inter card-desc">
-                Face off against thousands of players at once. Lock in your answers fast and watch the leaderboard change with every single question.
+                Face off against thousands of players at once. Lock in your
+                answers fast and watch the leaderboard change with every single
+                question.
               </p>
             </div>
 
             <div className="card-info glassmorphism-light">
-              <h3 className="text-white leaguegothic card-header">Easy Entry</h3>
+              <h3 className="text-white leaguegothic card-header">
+                Easy Entry
+              </h3>
               <p className="text-white/70 inter card-desc">
-                Forget long sign-ups. Pay your entry and you're in. Winners get instant, automatic cashouts.
+                Forget long sign-ups. Pay your entry and you're in. Winners get
+                instant, automatic cashouts.
               </p>
             </div>
           </div>
@@ -97,8 +120,6 @@ const Index = () => {
           </div>
         </div>
       </section>
-
-
     </div>
   );
 };
