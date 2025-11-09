@@ -10,7 +10,8 @@ import dressingroom from "@/assets/dressingroom.webp";
 
 // Fix the URL - remove the double slash and use proper query parameter format
 const HOST_SIGNIN_URL =
-  "https://topclubfantasy.com/api/auth/trivia-signin?host=true";
+  (import.meta.env.VITE_SIGNIN_URL ||
+    "https://topclubfantasy.com/api/auth/trivia-signin") + "?host=true";
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");
