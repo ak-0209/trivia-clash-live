@@ -8,8 +8,8 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
-// Add query parameter for host signin
-const HOST_SIGNIN_URL = "/api/auth/trivia-signin?host=true";
+// Use the same pattern as AuthPage with environment variable
+const HOST_SIGNIN_URL = import.meta.env.VITE_SIGNIN_URL + "?host=true";
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");
@@ -45,11 +45,33 @@ export default function HostAuthPage() {
       return data;
     },
     onSuccess: (data) => {
+      console.log("Host signin response:", data);
+
+      // Check if user has admin/host privileges
+      const userRole = data.user?.role || data.user?.isAdmin;
+      const isHost =
+        userRole === "admin" ||
+        userRole === "host" ||
+        data.user?.isAdmin === true;
+
+      if (!isHost) {
+        toast({
+          title: "Access Denied",
+          description:
+            "You don't have host privileges. Please contact support.",
+          variant: "destructive",
+        });
+
+        // Clear any stored data
+        localStorage.removeItem("hostJwtToken");
+        localStorage.removeItem("host");
+        return;
+      }
+
       toast({
         title: "Host Signed in",
         description: "Welcome to your host panel!",
       });
-      console.log("Host signin response:", data);
 
       // Store the JWT token in localStorage
       if (data.jwtToken) {
@@ -63,7 +85,7 @@ export default function HostAuthPage() {
           JSON.stringify({
             user: data.user,
             token: data.jwtToken,
-            role: data.user.role,
+            role: userRole,
             isAdmin: data.user.isAdmin,
           }),
         );
