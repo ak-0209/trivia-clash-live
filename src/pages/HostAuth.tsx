@@ -8,8 +8,8 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
-const HOST_SIGNIN_URL =
-  import.meta.env.VITE_HOST_SIGNIN_URL || import.meta.env.VITE_SIGNIN_URL;
+// Add query parameter for host signin
+const HOST_SIGNIN_URL = "/api/auth/trivia-signin?host=true";
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");
@@ -63,7 +63,8 @@ export default function HostAuthPage() {
           JSON.stringify({
             user: data.user,
             token: data.jwtToken,
-            role: data.user.role || "host",
+            role: data.user.role,
+            isAdmin: data.user.isAdmin,
           }),
         );
       }
