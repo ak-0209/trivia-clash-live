@@ -37,7 +37,10 @@ app.use(
 app.use(express.json());
 
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.url.startsWith("/api/lobbies")) {
+    console.log("🔎 HTTP Authorization header:", req.headers.authorization);
+    console.log("🔎 Origin header:", req.headers.origin);
+  }
   next();
 });
 
