@@ -24,15 +24,15 @@ type SignupResponse = {
 };
 
 // Use environment-specific URLs
-const SIGNUP_URL = import.meta.env.DEV
-  ? "http://localhost:4000/api/auth/triviasignup"
-  : import.meta.env.VITE_SIGNUP_URL ||
-    "https://topclubfantasy.com/api/auth/triviasignup";
+const AUTH_BASE_URL = import.meta.env.DEV
+  ? "http://localhost:4000/api/auth"
+  : (import.meta.env.VITE_AUTH_URL as string);
 
-const SIGNIN_URL = import.meta.env.DEV
-  ? "http://localhost:4000/api/auth/trivia-signin"
-  : import.meta.env.VITE_SIGNIN_URL ||
-    "https://topclubfantasy.com/api/auth/trivia-signin";
+// Remove trailing slash if present
+const authBase = AUTH_BASE_URL.replace(/\/$/, "");
+
+const SIGNUP_URL = `${authBase}/triviasignup`;
+const SIGNIN_URL = `${authBase}/trivia-signin`;
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signup" | "signin">("signup");

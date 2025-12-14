@@ -9,12 +9,12 @@ import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
 // For development, use the full URL to the backend server to bypass any proxy issues
+const baseAuthUrl =
+  import.meta.env.VITE_AUTH_URL || "https://topclubfantasy.com/api/auth";
+
 const HOST_SIGNIN_URL = import.meta.env.DEV
   ? "http://localhost:4000/api/auth/trivia-signin?host=true"
-  : `${
-      import.meta.env.VITE_SIGNIN_URL ||
-      "https://topclubfantasy.com/api/auth/trivia-signin"
-    }?host=true`;
+  : `${baseAuthUrl.replace(/\/$/, "")}/trivia-signin?host=true`;
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");
