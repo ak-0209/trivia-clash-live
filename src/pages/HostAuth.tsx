@@ -8,10 +8,13 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
-// Fix the URL - remove the double slash and use proper query parameter format
-const HOST_SIGNIN_URL =
-  (import.meta.env.VITE_SIGNIN_URL ||
-    "https://topclubfantasy.com/api/auth/trivia-signin") + "?host=true";
+// For development, use the full URL to the backend server to bypass any proxy issues
+const HOST_SIGNIN_URL = import.meta.env.DEV
+  ? "http://localhost:4000/api/auth/trivia-signin?host=true"
+  : `${
+      import.meta.env.VITE_SIGNIN_URL ||
+      "https://topclubfantasy.com/api/auth/trivia-signin"
+    }?host=true`;
 
 export default function HostAuthPage() {
   const [email, setEmail] = useState("");

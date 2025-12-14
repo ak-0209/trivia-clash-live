@@ -1,4 +1,5 @@
-import { Schema, model, Document } from "mongoose";
+import mongoose, { Document, Model } from "mongoose";
+import { model, Schema } from "mongoose";
 
 export interface ILobby extends Document {
   id: string;
@@ -11,7 +12,11 @@ export interface ILobby extends Document {
   currentQuestionIndex?: number;
   startTime?: Date;
 
-  // Add host tracking
+  // Add these new properties for round support
+  totalRounds?: number;
+  currentRound?: number;
+  totalQuestionsInRound?: number;
+
   host?: {
     userId: string;
     name: string;
@@ -19,7 +24,6 @@ export interface ILobby extends Document {
     socketId?: string;
     lastActive: Date;
   };
-
   players: Array<{
     userId: string;
     name: string;
@@ -27,12 +31,10 @@ export interface ILobby extends Document {
     score: number;
     joinedAt: Date;
     socketId?: string;
-    // 🆕 ADD ANSWER TRACKING FIELDS
     hasAnsweredCurrentQuestion?: boolean;
     lastAnswerTime?: Date;
     lastAnswerCorrect?: boolean;
   }>;
-
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +59,11 @@ const LobbySchema = new Schema(
     currentQuestionIndex: { type: Number },
     startTime: { type: Date },
 
+    // Add these new fields for round support
+    totalRounds: { type: Number, default: 0 },
+    currentRound: { type: Number, default: 0 },
+    totalQuestionsInRound: { type: Number, default: 0 },
+
     // Host schema
     host: {
       userId: { type: String },
@@ -74,21 +81,19 @@ const LobbySchema = new Schema(
         score: { type: Number, default: 0 },
         joinedAt: { type: Date, default: Date.now },
         socketId: { type: String },
-        // 🆕 ADD ANSWER TRACKING FIELDS
         hasAnsweredCurrentQuestion: { type: Boolean, default: false },
         lastAnswerTime: { type: Date },
         lastAnswerCorrect: { type: Boolean },
       },
     ],
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
-// Create index for faster queries
+// Create indexes for faster queries
 LobbySchema.index({ id: 1 });
 LobbySchema.index({ status: 1 });
+LobbySchema.index({ gameState: 1 });
 LobbySchema.index({ "players.userId": 1 });
 LobbySchema.index({ "host.userId": 1 });
 

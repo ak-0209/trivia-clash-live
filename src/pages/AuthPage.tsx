@@ -8,11 +8,6 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp";
 
-// import { apiRequest } from "../lib/queryCient"; // not used here, using fetch directly
-
-type AuthMode = "signup" | "signin";
-type AuthStep = "credentials" | "verification";
-
 // Type for signup payload
 type SignupPayload = {
   firstName: string;
@@ -28,13 +23,22 @@ type SignupResponse = {
   [key: string]: any;
 };
 
-const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
+// Use environment-specific URLs
+const SIGNUP_URL = import.meta.env.DEV
+  ? "http://localhost:4000/api/auth/triviasignup"
+  : import.meta.env.VITE_SIGNUP_URL ||
+    "https://topclubfantasy.com/api/auth/triviasignup";
 
-const SIGNIN_URL = import.meta.env.VITE_SIGNIN_URL;
+const SIGNIN_URL = import.meta.env.DEV
+  ? "http://localhost:4000/api/auth/trivia-signin"
+  : import.meta.env.VITE_SIGNIN_URL ||
+    "https://topclubfantasy.com/api/auth/trivia-signin";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<AuthMode>("signup");
-  const [step, setStep] = useState<AuthStep>("credentials");
+  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [step, setStep] = useState<"credentials" | "verification">(
+    "credentials",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -42,18 +46,15 @@ export default function AuthPage() {
   const [verificationCode, setVerificationCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
   const navigate = useNavigate();
 
   // React Query mutation for signup POST
-  // type aliases already declared above
   const signupMutation = useMutation<SignupResponse, any, SignupPayload>({
     mutationFn: async (payload: SignupPayload) => {
-      // use the payload passed by mutateAsync instead of outer state
       const resp = await fetch(SIGNUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // if you need cookies from auth server, add: credentials: "include",
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 
@@ -140,7 +141,7 @@ export default function AuthPage() {
           JSON.stringify({
             user: data.user,
             lobbyName: data.user.lobbyName,
-            token: data.jwtToken, // Make sure token is stored here too
+            token: data.jwtToken,
           }),
         );
       }
@@ -194,23 +195,20 @@ export default function AuthPage() {
         firstName,
         lastName,
         emailId: email, // backend expects `emailId`
-        // add other optional fields here as needed
       };
 
       try {
         await signupMutation.mutateAsync(payload);
-        // onSuccess will handle toast + setStep
       } catch (err) {
         // onError handled by mutation options
       }
       return;
     }
 
-    // Signin flow implemented here!
+    // Signin flow
     if (mode === "signin") {
       try {
         await signInMutation.mutateAsync({ emailId: email, password });
-        // onSuccess will handle toast + localStorage set
       } catch (err) {
         // onError handled by mutation options
       }
@@ -233,7 +231,6 @@ export default function AuthPage() {
     setIsLoading(true);
 
     // verification logic (unchanged)...
-    // e.g. call your verify endpoint here
     setIsLoading(false);
   };
 
@@ -255,13 +252,12 @@ export default function AuthPage() {
 
     try {
       await signupMutation.mutateAsync(payload);
-      // onSuccess will show toast and set step
     } catch (err) {
       // onError handled by mutation
     }
   };
 
-  const switchMode = (newMode: AuthMode) => {
+  const switchMode = (newMode: "signup" | "signin") => {
     setMode(newMode);
     setStep("credentials");
     setEmail("");

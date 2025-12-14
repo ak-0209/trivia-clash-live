@@ -9,6 +9,7 @@ import path from "path";
 import fs from "fs";
 import lobbyRoutes from "./routes/lobby";
 import questionRoutes from "./routes/questionRoutes";
+import { authenticateToken } from "./authMiddleware";
 
 const rootEnv = path.resolve(process.cwd(), ".env"); // repo root .env
 const serverEnv = path.resolve(process.cwd(), "server/.env"); // server/.env if you keep it there
@@ -24,10 +25,24 @@ console.log("JWT_SECRET present:", Boolean(process.env.JWT_SECRET));
 
 const app = express();
 
+// Determine if we're in development or production
+const isDevelopment = process.env.NODE_ENV !== "production";
+
+// Configure allowed origins based on environment
+const allowedOrigins = isDevelopment
+  ? [
+      "http://localhost:8080", // Frontend development server
+      "http://localhost:3000", // Trivia server itself
+      "http://localhost:4000", // Auth server
+    ]
+  : [process.env.FRONTEND_URL || "https://live-trivia.tribetechnologies.org"];
+
+console.log("Allowed CORS origins:", allowedOrigins);
+
 // Configure CORS properly for credentials
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:8080",
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -47,8 +62,9 @@ app.use((req, res, next) => {
 // 🆕 ADD THESE ROUTE IMPORTS
 
 // 🆕 MOUNT THE ROUTES
-app.use("/api/lobbies", lobbyRoutes);
-app.use("/api/questions", questionRoutes);
+
+app.use("/api/lobbies", authenticateToken, lobbyRoutes);
+app.use("/api/questions", authenticateToken, questionRoutes);
 
 app.get("/api/health", (_req: express.Request, res: express.Response) =>
   res.json({ status: "ok" }),

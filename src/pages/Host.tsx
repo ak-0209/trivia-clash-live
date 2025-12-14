@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   X,
+  List,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import StreamView from "@/components/StreamView";
@@ -23,6 +24,16 @@ import {
 } from "@/components/ui/dialog";
 import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
 import dressingroom from "@/assets/dressingroom.webp";
+
+// Types for rounds
+interface Round {
+  id: string;
+  name: string;
+  description?: string;
+  order: number;
+  isActive: boolean;
+  metadata?: Record<string, any>;
+}
 
 export function joinUrl(base: string, path: string) {
   const _base = base.replace(/\/+$/, "");
@@ -38,12 +49,18 @@ const Host = () => {
     "waiting" | "countdown" | "active" | "paused" | "results"
   >("waiting");
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [currentRound, setCurrentRound] = useState(-1);
+  const [totalRounds, setTotalRounds] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [totalQuestionsInRound, setTotalQuestionsInRound] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [currentQuestionData, setCurrentQuestionData] = useState<any>(null);
   const [playerCount, setPlayerCount] = useState(0);
   const [showEndGameModal, setShowEndGameModal] = useState(false);
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [showRoundSelector, setShowRoundSelector] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
 
   // Modal state
   const [showStartModal, setShowStartModal] = useState(false);
@@ -54,10 +71,10 @@ const Host = () => {
     import.meta.env.VITE_YOUTUBE_STREAM_URL ||
       "https://www.youtube.com/embed/YDvsBbKfLPA",
   );
+  const [roundsLoaded, setRoundsLoaded] = useState(false);
 
   const API_BASE = import.meta.env.VITE_API_URL;
 
-  // Connect to WebSocket
   // Connect to WebSocket and restore state
   useEffect(() => {
     const token = localStorage.getItem("hostJwtToken");
@@ -98,8 +115,7 @@ const Host = () => {
       console.log("Host disconnected from WebSocket");
     });
 
-    // 🆕 CRITICAL: Listen for lobby-joined event to restore state
-    // 🆕 CRITICAL: Listen for lobby-joined event to restore state
+    // Listen for lobby-joined event to restore state
     socket.on(
       "lobby-joined",
       (data: {
@@ -107,41 +123,66 @@ const Host = () => {
         isNewHost: boolean;
         wasGameInProgress: boolean;
         remainingTime?: number;
-        totalQuestions?: number; // 🆕 ADD THIS
+        totalQuestions?: number;
+        totalRounds?: number; // New field for rounds
+        currentRound?: number; // New field for current round
+        totalQuestionsInRound?: number; // New field for questions in current round
       }) => {
         console.log("Host received lobby-joined:", data);
 
-        const { lobby, wasGameInProgress, remainingTime, totalQuestions } =
-          data;
+        const {
+          lobby,
+          wasGameInProgress,
+          remainingTime,
+          totalQuestions,
+          totalRounds,
+          currentRound,
+          totalQuestionsInRound,
+        } = data;
 
-        // 🆕 SET TOTAL QUESTIONS FROM SERVER
+        // Set total rounds from server
+        if (totalRounds) {
+          setTotalRounds(totalRounds);
+        }
+
+        // Set current round from server
+        if (currentRound !== undefined) {
+          setCurrentRound(currentRound);
+        }
+
+        // Set total questions in current round from server
+        if (totalQuestionsInRound) {
+          setTotalQuestionsInRound(totalQuestionsInRound);
+        }
+
+        // Set total questions from server
         if (totalQuestions) {
           setTotalQuestions(totalQuestions);
         }
 
-        // 🆕 CRITICAL: Always restore game state from server
+        // Always restore game state from server
         if (lobby) {
           setPlayerCount(lobby.playerCount || 0);
           setCurrentQuestion(lobby.currentQuestionIndex || 0);
 
-          // 🆕 Only set totalQuestions if not already set from the data
+          // Only set total questions if not already set from data
           if (!totalQuestions) {
             setTotalQuestions(lobby.totalQuestions || 10);
           }
 
-          // 🆕 RESTORE CURRENT QUESTION DATA
+          // Restore current question data
           if (lobby.currentQuestion) {
             setCurrentQuestionData(lobby.currentQuestion);
           }
 
-          // 🆕 UPDATED status mapping with timer state consideration
+          // Updated status mapping with timer state consideration
           if (lobby.status === "countdown") {
             setGameStatus("countdown");
             setCountdown(lobby.countdown || 0);
           } else if (lobby.status === "in-progress") {
             setGameStatus("active");
 
-            // 🆕 CRITICAL: Use actual remaining time from server, not full time
+            // Use actual remaining time from server, not full time
             if (remainingTime && remainingTime > 0) {
               setCountdown(remainingTime);
               console.log(
@@ -160,11 +201,11 @@ const Host = () => {
             setGameStatus("waiting");
           }
 
-          // 🆕 Show toast for state restoration
+          // Show toast for state restoration
           if (wasGameInProgress) {
             toast({
               title: "Game State Restored",
-              description: `Resumed from question ${
+              description: `Resumed from round ${currentRound || 0}, question ${
                 lobby.currentQuestionIndex || 0
               }`,
             });
@@ -172,11 +213,6 @@ const Host = () => {
         }
       },
     );
-
-    // socket.on("lobby-update", (data: { type: string; data: any }) => {
-    //   console.log("Host received update:", data.type, data.data);
-    //   handleHostUpdate(data.type, data.data);
-    // });
 
     socket.on("lobby-update", (data: { type: string; data: any }) => {
       console.log("Host received update:", data.type, data.data);
@@ -193,7 +229,8 @@ const Host = () => {
       handleHostUpdate(data.type, data.data);
     });
 
-    // Fetch total questions count
+    // Fetch rounds and total questions count
+    fetchRounds();
     fetchTotalQuestions();
 
     return () => {
@@ -201,53 +238,121 @@ const Host = () => {
     };
   }, [toast]);
 
-  useEffect(() => {
-    const fetchCurrentLobbyState = async () => {
-      try {
-        const token = localStorage.getItem("hostJwtToken");
-        const url = joinUrl(API_BASE, "/lobbies/main-lobby");
-
-        const response = await fetch(url, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-            "Content-Type": "application/json",
-          },
-          // credentials: "include" // uncomment if you rely on cookies
+  const startFirstRound = async () => {
+    return new Promise<void>((resolve, reject) => {
+      if (!socketRef.current) {
+        toast({
+          title: "Connection Error",
+          description: "Not connected to server",
+          variant: "destructive",
         });
-
-        if (!response.ok) {
-          console.error(
-            `Failed to fetch lobby state: ${response.status} ${response.statusText}`,
-          );
-          return;
-        }
-
-        const lobbyData = await response.json();
-        console.log("Fetched current lobby state:", lobbyData);
-
-        if (lobbyData) {
-          setPlayerCount(lobbyData.playerCount || 0);
-          setCurrentQuestion(lobbyData.currentQuestionIndex || 0);
-
-          if (lobbyData.status === "countdown") {
-            setGameStatus("countdown");
-          } else if (lobbyData.status === "in-progress") {
-            setGameStatus("active");
-          } else {
-            setGameStatus("waiting");
-          }
-
-          if (lobbyData.currentQuestion) {
-            setCurrentQuestionData(lobbyData.currentQuestion);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching current lobby state:", error);
+        reject();
+        return;
       }
-    };
 
-    fetchCurrentLobbyState();
-  }, []);
+      if (!roundsLoaded) {
+        toast({
+          title: "Loading",
+          description: "Please wait while rounds are loading...",
+        });
+        reject();
+        return;
+      }
+
+      if (rounds.length === 0) {
+        toast({
+          title: "No Rounds Available",
+          description: "Please create rounds in the admin panel first.",
+          variant: "destructive",
+        });
+        reject();
+        return;
+      }
+
+      // Don't close modal here - just set the game state
+      setGameStarted(true);
+      setCurrentRound(0); // First round is index 0
+      setCurrentQuestion(0);
+      setTotalRounds(rounds.length);
+
+      const firstRound = rounds[0];
+
+      // Notify server to activate first round
+      socketRef.current.emit("host-change-round", {
+        lobbyId: "main-lobby",
+        roundId: firstRound.id,
+        roundIndex: 0,
+        roundName: firstRound.name,
+      });
+
+      // Fetch questions for first round
+      fetchQuestionsInRound(firstRound.id).then((totalQuestions) => {
+        setTotalQuestionsInRound(totalQuestions);
+        toast({
+          title: "Game Started!",
+          description: `Round 1: ${firstRound.name} is now active`,
+        });
+        resolve();
+      });
+    });
+  };
+
+  const fetchRounds = async () => {
+    try {
+      const token = localStorage.getItem("hostJwtToken");
+      const url = joinUrl(API_BASE, "/questions/rounds");
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Fetched rounds data:", data);
+        setRounds(data.rounds || []);
+        setRoundsLoaded(true);
+        setTotalRounds(data.totalRounds || 0);
+
+        // Check if there's an active round
+        if (data.rounds && data.rounds.length > 0) {
+          const activeRoundIndex = data.rounds.findIndex(
+            (r: any) => r.isActive,
+          );
+
+          if (activeRoundIndex >= 0) {
+            setCurrentRound(activeRoundIndex);
+            // Don't automatically set gameStarted to true here
+            // Let the WebSocket connection handle game state
+          } else {
+            setCurrentRound(-1);
+            setGameStarted(false);
+          }
+        } else {
+          setCurrentRound(-1);
+          setGameStarted(false);
+        }
+      } else {
+        console.error(
+          "Failed to fetch rounds:",
+          response.status,
+          response.statusText,
+        );
+        setRounds([]);
+        setRoundsLoaded(true);
+        setCurrentRound(-1);
+        setGameStarted(false);
+      }
+    } catch (error) {
+      console.error("Error fetching rounds:", error);
+      setRounds([]);
+      setRoundsLoaded(true);
+      setCurrentRound(-1);
+      setGameStarted(false);
+    }
+  };
 
   const fetchTotalQuestions = async () => {
     try {
@@ -277,6 +382,39 @@ const Host = () => {
     }
   };
 
+  const fetchQuestionsInRound = async (roundId: string) => {
+    try {
+      const token = localStorage.getItem("hostJwtToken");
+      const url = joinUrl(API_BASE, `/questions/round/${roundId}/total`);
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const total = data.totalQuestions ?? 0;
+        setTotalQuestionsInRound(total);
+        console.log(`Fetched ${total} questions for round ${roundId}`);
+        return total;
+      } else {
+        console.error(
+          "Failed to fetch questions in round:",
+          response.status,
+          response.statusText,
+        );
+        setTotalQuestionsInRound(5); // fallback
+        return 5;
+      }
+    } catch (error) {
+      console.error("Error fetching questions in round:", error);
+      setTotalQuestionsInRound(5); // fallback
+      return 5;
+    }
+  };
+
   const handleHostUpdate = (type: string, data: any) => {
     switch (type) {
       case "player-joined":
@@ -288,7 +426,7 @@ const Host = () => {
         // Update stats if needed
         break;
 
-      // 🆕 ADD ANSWERED COUNT HANDLER
+      // Add answered count handler
       case "answered-count-updated":
         setAnsweredCount(data.answeredCount);
         console.log(
@@ -300,9 +438,9 @@ const Host = () => {
         setCurrentQuestionData(data.question);
         setGameStatus("active");
         setCurrentQuestion(data.questionIndex);
-        setAnsweredCount(0); // 🆕 RESET ANSWERED COUNT
+        setAnsweredCount(0); // Reset answered count
 
-        // 🆕 CRITICAL: ADD THIS COUNTDOWN SETTING
+        // Add this countdown setting
         if (data.startTime) {
           const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
           const remaining = Math.max(0, (data.timeLimit || 30) - elapsed);
@@ -322,8 +460,8 @@ const Host = () => {
         break;
 
       case "question-ended":
-        setGameStatus("waiting"); // 🆕 CHANGED from "results" to "waiting"
-        setCountdown(0); // 🆕 ADD THIS TO RESET COUNTDOWN
+        setGameStatus("waiting");
+        setCountdown(0); // Reset countdown
         toast({
           title: "Question Ended!",
           description: `Correct answer: ${data.correctAnswer}`,
@@ -344,11 +482,30 @@ const Host = () => {
         setCountdown(data.countdown);
         break;
 
+      case "round-changed":
+        setCurrentRound(data.roundIndex);
+        setCurrentQuestion(0);
+        setTotalQuestionsInRound(data.totalQuestionsInRound);
+        setCurrentQuestionData(null);
+        setGameStatus("waiting");
+        setCountdown(0);
+
+        // Fetch questions for the new round
+        fetchQuestionsInRound(data.roundId);
+
+        toast({
+          title: "Round Changed!",
+          description: `Now playing: ${data.roundName}`,
+        });
+        break;
+
       case "game-ended":
         setGameStatus("waiting");
         setCurrentQuestion(0);
+        setCurrentRound(-1);
+        setGameStarted(false);
         setCurrentQuestionData(null);
-        setCountdown(0); // 🆕 ADD THIS TO RESET COUNTDOWN
+        setCountdown(0);
         toast({
           title: "Game Completed!",
           description: "The game has ended. Final results are available.",
@@ -358,9 +515,10 @@ const Host = () => {
       case "lobby-reset":
         setGameStatus("waiting");
         setCurrentQuestion(0);
+        setCurrentRound(0);
         setCurrentQuestionData(null);
         setPlayerCount(0);
-        setCountdown(0); // 🆕 ADD THIS TO RESET COUNTDOWN
+        setCountdown(0);
         toast({
           title: "Lobby Reset",
           description: "Lobby has been reset and is ready for a new game",
@@ -385,17 +543,69 @@ const Host = () => {
     setShowStartModal(true);
   };
 
+  // Open round selector modal
+  const handleOpenRoundSelector = () => {
+    setShowRoundSelector(true);
+  };
+
   // Start with countdown
-  const handleStartWithCountdown = () => {
+  const handleStartWithCountdown = async () => {
     if (!socketRef.current) return;
 
+    // If game hasn't started yet, start first round
+    if (!gameStarted) {
+      await startFirstRound();
+
+      // Wait for round to be set on server before starting question
+      setTimeout(() => {
+        const seconds = Math.min(60, Math.max(0, countdownSeconds));
+        const currentRoundId = rounds[0]?.id;
+
+        if (!currentRoundId) {
+          toast({
+            title: "Error",
+            description: "No round ID available",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        socketRef.current!.emit("host-start-countdown", {
+          lobbyId: "main-lobby",
+          countdownSeconds: seconds,
+          questionIndex: 1, // First question is index 1
+          roundId: currentRoundId, // Make sure to include the round ID
+        });
+
+        setCurrentQuestion(1); // Set to 1 for UI
+        setGameStatus("countdown");
+        setCountdown(seconds);
+        setAnsweredCount(0);
+        setShowStartModal(false);
+      }, 1500); // Increased timeout to ensure round is set
+
+      return;
+    }
+
+    // Regular flow for subsequent questions
     const nextQuestionIndex = currentQuestion + 1;
     const seconds = Math.min(60, Math.max(0, countdownSeconds));
+    const currentRoundId = rounds[currentRound]?.id;
+
+    if (!currentRoundId) {
+      toast({
+        title: "Error",
+        description: "No round ID available",
+        variant: "destructive",
+      });
+      return;
+    }
 
     socketRef.current.emit("host-start-countdown", {
       lobbyId: "main-lobby",
       countdownSeconds: seconds,
       questionIndex: nextQuestionIndex,
+      roundId: currentRoundId, // Make sure to include the round ID
     });
 
     setCurrentQuestion(nextQuestionIndex);
@@ -406,20 +616,66 @@ const Host = () => {
   };
 
   // Start immediately
-  const handleStartImmediately = () => {
+  const handleStartImmediately = async () => {
     if (!socketRef.current) return;
 
+    // If game hasn't started yet, start first round
+    if (!gameStarted) {
+      try {
+        await startFirstRound();
+        setShowStartModal(false); // Close modal here
+
+        // Start first question immediately
+        const currentRoundId = rounds[0]?.id;
+
+        if (!currentRoundId) {
+          toast({
+            title: "Error",
+            description: "No round ID available",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        socketRef.current.emit("host-start-question", {
+          lobbyId: "main-lobby",
+          questionIndex: 1, // First question is index 1 (1-based)
+          roundId: currentRoundId,
+        });
+
+        toast({
+          title: "Question Started!",
+          description: `Question 1 is now live`,
+        });
+      } catch (error) {
+        console.error("Failed to start first round:", error);
+      }
+      return;
+    }
+
+    // Regular flow for subsequent questions
     const nextQuestionIndex = currentQuestion + 1;
+    const currentRoundId = rounds[currentRound]?.id;
+
+    if (!currentRoundId) {
+      toast({
+        title: "Error",
+        description: "No round ID available",
+        variant: "destructive",
+      });
+      return;
+    }
 
     socketRef.current.emit("host-start-question", {
       lobbyId: "main-lobby",
       questionIndex: nextQuestionIndex,
+      roundId: currentRoundId,
     });
 
     setCurrentQuestion(nextQuestionIndex);
     setGameStatus("active");
     setAnsweredCount(0);
-    setShowStartModal(false);
+    setShowStartModal(false); // Close modal here
 
     toast({
       title: "Question Started!",
@@ -427,12 +683,62 @@ const Host = () => {
     });
   };
 
-  // 🎮 HOST: End current question early
+  // Start immediately
+  // const handleStartImmediately = async () => {
+  //   if (!socketRef.current) return;
+
+  //   // If game hasn't started yet, start first round
+  //   if (!gameStarted) {
+  //     await startFirstRound();
+
+  //     // Wait for round to be set on server before starting question
+  //     setTimeout(() => {
+  //       socketRef.current!.emit("host-start-question", {
+  //         lobbyId: "main-lobby",
+  //         questionIndex: 1, // First question is index 1 (1-based)
+  //         roundId: rounds[0]?.id,
+  //       });
+
+  //       setCurrentQuestion(1); // Set to 1 for UI display
+  //       setGameStatus("active");
+  //       setAnsweredCount(0);
+  //       setShowStartModal(false);
+
+  //       toast({
+  //         title: "Question Started!",
+  //         description: `Question 1 is now live`,
+  //       });
+  //     }, 1000); // Increase timeout to 1 second to ensure round is set
+
+  //     return;
+  //   }
+
+  //   // Regular flow for subsequent questions
+  //   const nextQuestionIndex = currentQuestion + 1;
+
+  //   socketRef.current.emit("host-start-question", {
+  //     lobbyId: "main-lobby",
+  //     questionIndex: nextQuestionIndex,
+  //     roundId: rounds[currentRound]?.id,
+  //   });
+
+  //   setCurrentQuestion(nextQuestionIndex);
+  //   setGameStatus("active");
+  //   setAnsweredCount(0);
+  //   setShowStartModal(false);
+
+  //   toast({
+  //     title: "Question Started!",
+  //     description: `Question ${nextQuestionIndex} is now live`,
+  //   });
+  // };
+
+  // End current question early
   const handleEndQuestion = () => {
     if (!socketRef.current) return;
 
     socketRef.current.emit("host-end-question", "main-lobby");
-    setGameStatus("waiting"); // 🆕 CHANGED from "results" to "waiting"
+    setGameStatus("waiting");
 
     toast({
       title: "Question Ended",
@@ -440,15 +746,67 @@ const Host = () => {
     });
   };
 
-  // 🎮 HOST: End game
+  // Change to next round
+  const handleNextRound = () => {
+    if (!socketRef.current || rounds.length === 0) return;
+
+    const nextRoundIndex = currentRound + 1;
+
+    if (nextRoundIndex >= rounds.length) {
+      toast({
+        title: "No More Rounds",
+        description: "You've reached the last round",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const nextRound = rounds[nextRoundIndex];
+
+    // Reset question counter for new round
+    setCurrentRound(nextRoundIndex);
+    setCurrentQuestion(0);
+    setGameStarted(true); // Ensure game is marked as started
+
+    socketRef.current.emit("host-change-round", {
+      lobbyId: "main-lobby",
+      roundId: nextRound.id,
+      roundIndex: nextRoundIndex,
+      roundName: nextRound.name,
+    });
+
+    // Fetch questions for the new round
+    fetchQuestionsInRound(nextRound.id);
+
+    toast({
+      title: "Round Changed!",
+      description: `Now playing: ${nextRound.name}`,
+    });
+  };
+
+  const shouldShowRoundInfo =
+    (gameStarted || currentRound >= 0) && roundsLoaded && currentRound >= 0;
+  const currentRoundName = shouldShowRoundInfo
+    ? rounds[currentRound]?.name || "Unknown Round"
+    : "No Round Active";
+
+  // End game
   const handleEndGame = () => {
     if (!socketRef.current) return;
 
     socketRef.current.emit("host-end-game", "main-lobby");
+
+    // Reset all state - IMPORTANT: Set currentRound to -1
     setGameStatus("waiting");
     setCurrentQuestion(0);
+    setCurrentRound(-1); // Already -1, but keep it
+    setTotalQuestionsInRound(0);
     setPlayerCount(0);
     setCurrentQuestionData(null);
+    setCountdown(0);
+    setGameStarted(false); // Make sure this is false
+    setAnsweredCount(0);
+    setShowEndGameModal(false); // Close the modal
 
     toast({
       title: "Game Ended",
@@ -492,24 +850,14 @@ const Host = () => {
     });
   };
 
-  // const handlePauseGame = () => {
-  //   setGameStatus("paused");
-  //   toast({
-  //     title: "Game Paused",
-  //     description: "Players can no longer submit answers",
-  //   });
-  // };
-
-  // const handleResumeGame = () => {
-  //   setGameStatus("active");
-  //   toast({
-  //     title: "Game Resumed",
-  //     description: "Players can now submit answers",
-  //   });
-  // };
-
   // Determine if start button should be enabled
   const canStartQuestion = gameStatus === "waiting" || gameStatus === "results";
+
+  // Get current round name
+  const getCurrentRoundName = () => {
+    if (!roundsLoaded || rounds.length === 0) return "No Rounds";
+    return rounds[currentRound]?.name || "Unknown Round";
+  };
 
   return (
     <div
@@ -530,6 +878,7 @@ const Host = () => {
           <div className="hostpanel-header-left flex flex-col items-center">
             <div className="hostpanel-title leaguegothic">HOST PANEL</div>
             <div className="flex flex-col gap-3">
+              {/* In your header section, update the round display */}
               <div className="status-row">
                 <div className="glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
                   {gameStatus === "active"
@@ -542,11 +891,24 @@ const Host = () => {
                     ? "📊 RESULTS"
                     : "⏹️ WAITING"}
                 </div>
+
+                {/* SIMPLIFY THIS LOGIC */}
                 <span className="question-status">
-                  Question {currentQuestion} / {totalQuestions}
+                  {currentRound >= 0 ? (
+                    <>
+                      Round {currentRound + 1} of {totalRounds}:{" "}
+                      {getCurrentRoundName()} - Question{" "}
+                      {Math.max(currentQuestion, 0)} / {totalQuestionsInRound}
+                    </>
+                  ) : (
+                    "Game not started. Ready to begin."
+                  )}
                 </span>
+
                 {gameStatus === "countdown" && (
-                  <span className="countdown">{countdown}</span>
+                  <span className="countdown ml-4 text-2xl font-bold text-yellow-300">
+                    {countdown}s
+                  </span>
                 )}
               </div>
               <div className="justify-center glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
@@ -578,10 +940,51 @@ const Host = () => {
 
             <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
               <h2 className="text-4xl leaguegothic uppercase">
-                Live Stream Manager
+                Round Controls
               </h2>
 
               <div className="grid md:grid-cols-2 gap-6">
+                {/* Round Selector */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">
+                    {shouldShowRoundInfo
+                      ? "🏆 Current Round"
+                      : "🏆 Ready to Start"}
+                  </h3>
+                  <div className="space-y-3">
+                    {shouldShowRoundInfo ? (
+                      <>
+                        <div className="p-3 bg-muted/30 rounded-lg glassmorphism-light">
+                          <div className="text-xl font-bold">
+                            Round {currentRound + 1} of {totalRounds}
+                          </div>
+                          <div className="text-sm">{currentRoundName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {totalQuestionsInRound} questions in this round
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleOpenRoundSelector}
+                          variant="outline"
+                          className="w-full"
+                        >
+                          <List className="w-4 h-4 mr-2" />
+                          Change Round
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="p-3 bg-muted/30 rounded-lg glassmorphism-light">
+                        <div className="text-xl font-bold">
+                          Game Not Started
+                        </div>
+                        <div className="text-sm">
+                          Click "Start Game" to begin Round 1
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Stream URL Control */}
                 <div>
                   <h3 className="text-lg font-semibold mb-3">
@@ -629,13 +1032,13 @@ const Host = () => {
                     <p className="text-sm text-muted-foreground text-center">
                       {isStreamMuted
                         ? "All players have muted audio"
-                        : "All players can hear the stream"}
+                        : "All players can hear stream"}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* 🆕 Stream Status */}
+              {/* Stream Status */}
               <div className="mt-4 p-3 bg-muted/30 rounded-lg glassmorphism-light flex items-center gap-2 text-white">
                 <div
                   className="flex items-center justify-between flex-wrap gap-4"
@@ -652,7 +1055,6 @@ const Host = () => {
             </Card>
 
             {/* Question Controls */}
-            {/* Question Controls */}
             <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
               <h2 className="text-4xl leaguegothic uppercase">
                 Question Controls
@@ -667,27 +1069,37 @@ const Host = () => {
                     className="w-full glassmorphism-light flex items-center gap-2 text-white"
                   >
                     <Play className="w-4 h-4 mr-2" />
-                    {currentQuestion === 0 ? "Start Game" : "Next Question"}
+                    {/* SIMPLE FIX: Use currentRound instead of gameStarted */}
+                    {currentRound < 0 ? "Start Game" : "Next Question"}
                   </Button>
                   <p className="text-sm text-muted-foreground text-center">
                     {canStartQuestion
-                      ? "Start the next question with countdown or immediately"
+                      ? currentRound < 0
+                        ? "Start the first round of the game"
+                        : "Start the next question with countdown or immediately"
                       : "Question is currently active"}
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-2">
                   <Button
-                    variant="destructive"
-                    onClick={() => setShowEndGameModal(true)} // 🆕 CHANGED to open modal
-                    className=""
+                    variant="outline"
+                    onClick={handleNextRound}
+                    disabled={currentRound >= totalRounds - 1}
+                    className="w-full"
                   >
-                    End Game
+                    <SkipForward className="w-4 h-4 mr-2" />
+                    Next Round
                   </Button>
+                  <p className="text-sm text-muted-foreground text-center">
+                    {currentRound >= totalRounds - 1
+                      ? "This is the last round"
+                      : "Move to the next round"}
+                  </p>
                 </div>
               </div>
 
-              {/* 🆕 SIMPLIFIED Game State Controls - Removed pause and duplicate buttons */}
+              {/* Game State Controls */}
               <div className="grid gap-4">
                 {gameStatus === "active" && (
                   <Button
@@ -699,16 +1111,13 @@ const Host = () => {
                   </Button>
                 )}
 
-                {/* {gameStatus === "paused" && (
-                  <Button
-                    variant="hero"
-                    onClick={handleResumeGame}
-                    className="w-full"
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Resume Question
-                  </Button>
-                )} */}
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowEndGameModal(true)}
+                  className=""
+                >
+                  End Game
+                </Button>
               </div>
             </Card>
 
@@ -790,15 +1199,39 @@ const Host = () => {
               </h3>
               <div className="progress-block">
                 <span>
-                  {currentQuestion} / {totalQuestions}
+                  {currentRound >= 0 ? (
+                    <>
+                      Round {currentRound + 1} of {totalRounds}
+                    </>
+                  ) : (
+                    <>No Round Active</>
+                  )}
                 </span>
                 <div className="progress-bar">
                   <div
                     className="progress-fill"
                     style={{
                       width: `${
-                        totalQuestions > 0
-                          ? (currentQuestion / totalQuestions) * 100
+                        totalRounds > 0 && currentRound >= 0
+                          ? ((currentRound + 1) / totalRounds) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="progress-block">
+                <span>
+                  Question {currentQuestion} / {totalQuestionsInRound}
+                </span>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${
+                        totalQuestionsInRound > 0
+                          ? (currentQuestion / totalQuestionsInRound) * 100
                           : 0
                       }%`,
                     }}
@@ -819,24 +1252,27 @@ const Host = () => {
           </div>
         </div>
 
+        {/* Start Modal */}
         <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-xl">
-                {currentQuestion === 0
+                {currentQuestion === 0 && !gameStarted
                   ? "Start Game"
-                  : currentQuestion >= totalQuestions - 1
-                  ? "Final Question"
+                  : totalQuestionsInRound > 0 &&
+                    currentQuestion >= totalQuestionsInRound - 1
+                  ? "Final Question in Round"
                   : "Next Question"}
               </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-6 py-4">
-              {/* 🆕 CHECK IF LAST QUESTION */}
-              {currentQuestion >= totalQuestions - 1 ? (
+              {/* Check if last question in round */}
+              {totalQuestionsInRound > 0 &&
+              currentQuestion >= totalQuestionsInRound - 1 ? (
                 <div className="text-center">
                   <p className="text-lg font-semibold mb-4">
-                    🎯 This is the final question!
+                    🎯 This is the final question in this round!
                   </p>
                   <Button
                     onClick={handleStartImmediately}
@@ -847,7 +1283,7 @@ const Host = () => {
                     Start Final Question
                   </Button>
                   <p className="text-sm text-muted-foreground mt-2">
-                    After this question, the game will end automatically
+                    After this question, you can move to the next round
                   </p>
                 </div>
               ) : (
@@ -860,12 +1296,12 @@ const Host = () => {
                       className="w-full py-6 text-lg glassmorphism-light flex items-center gap-2 text-white"
                     >
                       <Play className="w-5 h-5 mr-2" />
-                      {currentQuestion === 0
+                      {currentQuestion === 0 && !gameStarted
                         ? "Start Game"
                         : "Start Immediately"}
                     </Button>
                     <p className="text-sm text-muted-foreground mt-2">
-                      {currentQuestion === 0
+                      {currentQuestion === 0 && !gameStarted
                         ? "Game will begin right away"
                         : "Question will begin right away"}
                     </p>
@@ -913,6 +1349,77 @@ const Host = () => {
           </DialogContent>
         </Dialog>
 
+        {/* Round Selector Modal */}
+        <Dialog open={showRoundSelector} onOpenChange={setShowRoundSelector}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl">Select Round</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {rounds.length === 0 ? (
+                <div className="text-center p-4">
+                  <p className="text-lg font-semibold mb-2">
+                    No Rounds Available
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Please create rounds in the admin panel first.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+                  {rounds.map((round, index) => (
+                    <Button
+                      key={round.id}
+                      variant={index === currentRound ? "default" : "outline"}
+                      className="justify-start h-auto p-4 text-left"
+                      onClick={() => {
+                        setCurrentRound(index);
+                        setCurrentQuestion(0);
+                        setTotalQuestionsInRound(0);
+                        setShowRoundSelector(false);
+                        setGameStarted(true); // Make sure game is marked as started
+
+                        // Fetch questions for selected round
+                        fetchQuestionsInRound(round.id);
+
+                        // Emit round change to server
+                        socketRef.current?.emit("host-change-round", {
+                          lobbyId: "main-lobby",
+                          roundId: round.id,
+                          roundIndex: index,
+                          roundName: round.name,
+                        });
+
+                        toast({
+                          title: "Round Changed!",
+                          description: `Now playing: ${round.name}`,
+                        });
+                      }}
+                    >
+                      <div className="flex flex-col items-start">
+                        <div className="font-bold">
+                          Round {index + 1}: {round.name}
+                          {round.isActive && (
+                            <Badge variant="secondary" className="ml-2">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                        {round.description && (
+                          <div className="text-sm text-muted-foreground">
+                            {round.description}
+                          </div>
+                        )}
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* End Game Confirmation Modal */}
         <Dialog open={showEndGameModal} onOpenChange={setShowEndGameModal}>
           <DialogContent className="sm:max-w-md">
@@ -948,6 +1455,7 @@ const Host = () => {
                   socketRef.current.emit("host-end-game", "main-lobby");
                   setGameStatus("waiting");
                   setCurrentQuestion(0);
+                  setCurrentRound(0);
                   setCurrentQuestionData(null);
                   setShowEndGameModal(false);
 
