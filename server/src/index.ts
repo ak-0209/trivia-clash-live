@@ -10,6 +10,7 @@ import fs from "fs";
 import lobbyRoutes from "./routes/lobby";
 import questionRoutes from "./routes/questionRoutes";
 import { authenticateToken } from "./authMiddleware";
+import gameSessionRoutes from "./routes/gameSessionRoutes";
 
 const rootEnv = path.resolve(process.cwd(), ".env"); // repo root .env
 const serverEnv = path.resolve(process.cwd(), "server/.env"); // server/.env if you keep it there
@@ -65,6 +66,7 @@ app.use((req, res, next) => {
 
 app.use("/api/lobbies", authenticateToken, lobbyRoutes);
 app.use("/api/questions", authenticateToken, questionRoutes);
+app.use("/api/game-sessions", gameSessionRoutes);
 
 app.get("/api/health", (_req: express.Request, res: express.Response) =>
   res.json({ status: "ok" }),

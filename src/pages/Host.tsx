@@ -11,6 +11,7 @@ import {
   Clock,
   X,
   List,
+  Trophy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import StreamView from "@/components/StreamView";
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
 import dressingroom from "@/assets/dressingroom.webp";
-
+import { LeaderboardSidebar } from "./LeaderBoard";
 // Types for rounds
 interface Round {
   id: string;
@@ -61,6 +62,7 @@ const Host = () => {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [showRoundSelector, setShowRoundSelector] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // Modal state
   const [showStartModal, setShowStartModal] = useState(false);
@@ -140,7 +142,6 @@ const Host = () => {
           totalQuestionsInRound,
         } = data;
 
-        // Set total rounds from server
         if (totalRounds) {
           setTotalRounds(totalRounds);
         }
@@ -148,6 +149,10 @@ const Host = () => {
         // Set current round from server
         if (currentRound !== undefined) {
           setCurrentRound(currentRound);
+
+          if (currentRound >= 0) {
+            setGameStarted(true);
+          }
         }
 
         // Set total questions in current round from server
@@ -460,12 +465,25 @@ const Host = () => {
         break;
 
       case "question-ended":
-        setGameStatus("waiting");
-        setCountdown(0); // Reset countdown
+        setGameStatus("waiting"); // Status goes back to waiting
+        setCountdown(0);
+
+        // Show toast with results
         toast({
           title: "Question Ended!",
           description: `Correct answer: ${data.correctAnswer}`,
         });
+
+        // NEW: Check if the server says the round is over
+        if (data.isRoundOver) {
+          toast({
+            title: "🏆 ROUND COMPLETE",
+            description:
+              "That was the last question! Please click 'Next Round'.",
+            duration: 10000, // Show for 10 seconds
+            className: "bg-green-600 text-white", // Make it stand out
+          });
+        }
         break;
 
       case "countdown-started":
@@ -480,23 +498,6 @@ const Host = () => {
 
       case "countdown":
         setCountdown(data.countdown);
-        break;
-
-      case "round-changed":
-        setCurrentRound(data.roundIndex);
-        setCurrentQuestion(0);
-        setTotalQuestionsInRound(data.totalQuestionsInRound);
-        setCurrentQuestionData(null);
-        setGameStatus("waiting");
-        setCountdown(0);
-
-        // Fetch questions for the new round
-        fetchQuestionsInRound(data.roundId);
-
-        toast({
-          title: "Round Changed!",
-          description: `Now playing: ${data.roundName}`,
-        });
         break;
 
       case "game-ended":
@@ -533,6 +534,25 @@ const Host = () => {
         }
         break;
 
+      case "round-changed":
+        setCurrentRound(data.roundIndex);
+
+        setCurrentQuestion(data.currentQuestionIndex || 0);
+
+        setTotalQuestionsInRound(data.totalQuestionsInRound);
+        setCurrentQuestionData(null);
+        setGameStatus("waiting");
+        setCountdown(0);
+
+        // Fetch questions for the new round
+        fetchQuestionsInRound(data.roundId);
+
+        toast({
+          title: "Round Changed!",
+          description: data.message || `Now playing: ${data.roundName}`,
+        });
+        break;
+
       default:
         console.log("Unhandled lobby update type:", type);
     }
@@ -552,11 +572,20 @@ const Host = () => {
   const handleStartWithCountdown = async () => {
     if (!socketRef.current) return;
 
-    // If game hasn't started yet, start first round
+    // 🛡️ GUARD CLAUSE: Prevent crashing if rounds aren't loaded yet
+    if (!rounds || rounds.length === 0) {
+      toast({
+        title: "Error",
+        description: "Rounds data is not loaded yet. Please wait a moment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // If game hasn't started yet, start first round logic
     if (!gameStarted) {
       await startFirstRound();
 
-      // Wait for round to be set on server before starting question
       setTimeout(() => {
         const seconds = Math.min(60, Math.max(0, countdownSeconds));
         const currentRoundId = rounds[0]?.id;
@@ -573,39 +602,40 @@ const Host = () => {
         socketRef.current!.emit("host-start-countdown", {
           lobbyId: "main-lobby",
           countdownSeconds: seconds,
-          questionIndex: 1, // First question is index 1
-          roundId: currentRoundId, // Make sure to include the round ID
+          questionIndex: 1,
+          roundId: currentRoundId,
         });
 
-        setCurrentQuestion(1); // Set to 1 for UI
+        setCurrentQuestion(1);
         setGameStatus("countdown");
         setCountdown(seconds);
         setAnsweredCount(0);
         setShowStartModal(false);
-      }, 1500); // Increased timeout to ensure round is set
-
+      }, 1500);
       return;
     }
 
     // Regular flow for subsequent questions
     const nextQuestionIndex = currentQuestion + 1;
     const seconds = Math.min(60, Math.max(0, countdownSeconds));
-    const currentRoundId = rounds[currentRound]?.id;
 
-    if (!currentRoundId) {
+    // 🛡️ GUARD CLAUSE: Ensure we have a valid round index
+    if (!rounds[currentRound]) {
       toast({
         title: "Error",
-        description: "No round ID available",
+        description: "Current round index is invalid",
         variant: "destructive",
       });
       return;
     }
 
+    const currentRoundId = rounds[currentRound].id;
+
     socketRef.current.emit("host-start-countdown", {
       lobbyId: "main-lobby",
       countdownSeconds: seconds,
       questionIndex: nextQuestionIndex,
-      roundId: currentRoundId, // Make sure to include the round ID
+      roundId: currentRoundId,
     });
 
     setCurrentQuestion(nextQuestionIndex);
@@ -872,6 +902,12 @@ const Host = () => {
         backgroundRepeat: "no-repeat",
       }}
     >
+      <LeaderboardSidebar
+        isOpen={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
+        rounds={rounds}
+        currentRoundIndex={currentRound}
+      />
       <div className="hostpanel-wrapper">
         {/* Header */}
         <header className="hostpanel-header">
@@ -1244,9 +1280,14 @@ const Host = () => {
               <h3 className="section-title text-4xl leaguegothic uppercase">
                 Quick Actions
               </h3>
-              <Button variant="outline" size="sm">
-                <Users className="icon" />
-                View All Players
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLeaderboard(true)} // <--- Update click handler
+                className="w-full flex items-center gap-2" // <--- Add styling
+              >
+                <Trophy className="w-4 h-4" /> {/* <--- Change Icon */}
+                View Leaderboard
               </Button>
             </Card>
           </div>

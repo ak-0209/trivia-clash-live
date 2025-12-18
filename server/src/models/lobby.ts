@@ -29,11 +29,20 @@ export interface ILobby extends Document {
     name: string;
     email: string;
     score: number;
+    roundScores: Array<{
+      roundId: string;
+      score: number;
+    }>;
     joinedAt: Date;
     socketId?: string;
     hasAnsweredCurrentQuestion?: boolean;
     lastAnswerTime?: Date;
     lastAnswerCorrect?: boolean;
+  }>;
+  roundProgress: Array<{
+    roundId: string;
+    nextQuestionIndex: number;
+    isCompleted: boolean;
   }>;
   createdAt: Date;
   updatedAt: Date;
@@ -79,11 +88,25 @@ const LobbySchema = new Schema(
         name: { type: String, required: true },
         email: { type: String, required: true },
         score: { type: Number, default: 0 },
+        roundScores: [
+          {
+            roundId: { type: String },
+            score: { type: Number, default: 0 },
+          },
+        ],
         joinedAt: { type: Date, default: Date.now },
         socketId: { type: String },
         hasAnsweredCurrentQuestion: { type: Boolean, default: false },
         lastAnswerTime: { type: Date },
         lastAnswerCorrect: { type: Boolean },
+      },
+    ],
+
+    roundProgress: [
+      {
+        roundId: { type: String },
+        nextQuestionIndex: { type: Number, default: 0 },
+        isCompleted: { type: Boolean, default: false },
       },
     ],
   },

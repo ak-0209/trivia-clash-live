@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, Tv } from "lucide-react";
+import { Users, Clock, Tv, Trophy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { LobbyStreamView } from "@/components/LobbyStreamView";
 import dressingroom from "@/assets/dressingroom.webp";
+import { LeaderboardSidebar } from "./LeaderBoard";
 
 // Types for WebSocket data
 interface LobbyUser {
@@ -64,6 +65,7 @@ const Lobby = () => {
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [hasAnswered, setHasAnswered] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
 
   // ADD THIS: Effect to handle timer based on lobbyStatus
   useEffect(() => {
@@ -427,7 +429,6 @@ const Lobby = () => {
         break;
 
       case "game-ended":
-        // Clear timer
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
           timerIntervalRef.current = null;
@@ -435,38 +436,48 @@ const Lobby = () => {
 
         setLobbyStatus("waiting");
         setCountdown(0);
+
+        // Get the data from the event
+        const leaderboardData = data.leaderboard || [];
+        const gameSessionId = data.gameSessionId;
+
+        console.log("Game ended with:", leaderboardData.length, "players");
+
+        // 2. CLEAR AUTH LOCAL STORAGE
+        // This is crucial: removes the token so they can't auto-reconnect if they refresh
+        localStorage.removeItem("jwtToken");
+        localStorage.removeItem("user");
+        localStorage.removeItem("hostJwtToken");
+
+        // 3. Store Leaderboard Data in LocalStorage
+        // We keep this so the /leaderboard page has data to show
+        localStorage.setItem("lastGameSessionId", gameSessionId);
+        localStorage.setItem(
+          "lastLeaderboard",
+          JSON.stringify(leaderboardData),
+        );
+
         toast({
-          title: "Game Over!",
-          description: `Winner: ${data.winner.name} with ${data.winner.score} points`,
+          title: "🏆 Game Over!",
+          description: "Redirecting to leaderboard...",
+          duration: 2000,
         });
-        break;
 
-      case "stream-control":
-        if (data.action === "mute") {
-          setIsStreamMuted(data.value);
-        } else if (data.action === "change_url") {
-          setCurrentStreamUrl(data.value);
-        }
-        break;
-
-      case "lobby-reset":
-        // Clear timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
+        // 4. Disconnect Socket explicitly
+        if (socketRef.current) {
+          socketRef.current.disconnect();
         }
 
-        setLobbyStatus("waiting");
-        setCountdown(0);
-        setCurrentQuestionIndex(0);
-        setCurrentRound(0);
-        setLobbyUsers([]);
-        toast({
-          title: "Lobby Reset",
-          description: "Lobby has been reset",
-        });
+        // 5. Navigate
+        setTimeout(() => {
+          navigate("/leaderboard", {
+            state: {
+              leaderboard: leaderboardData,
+              gameSessionId: gameSessionId,
+            },
+          });
+        }, 1500);
         break;
-
       default:
         console.log("Unhandled lobby update type:", type);
     }
@@ -534,6 +545,11 @@ const Lobby = () => {
         backgroundRepeat: "no-repeat",
       }}
     >
+      <LeaderboardSidebar
+        isOpen={isLeaderboardOpen}
+        onClose={() => setIsLeaderboardOpen(false)}
+        currentRoundIndex={currentRound}
+      />
       <div className="container mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 text-center">
@@ -744,52 +760,23 @@ const Lobby = () => {
           {/* Right Column - Players List */}
           <div className="lg:col-span-1 space-y-6">
             {/* Players List */}
-            <Card className="glass-panel p-6">
-              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">
-                Players ({playerCount})
-              </h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {lobbyUsers.length > 0 ? (
-                  [...lobbyUsers]
-                    .sort((a, b) => b.score - a.score)
-                    .map((user, index) => (
-                      <div
-                        key={user.userId}
-                        className="flex items-center justify-between p-3 bg-muted rounded-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                              index === 0
-                                ? "bg-yellow-500"
-                                : index === 1
-                                ? "bg-gray-400"
-                                : index === 2
-                                ? "bg-orange-500"
-                                : "bg-primary"
-                            }`}
-                          >
-                            {index + 1}
-                          </div>
-                          <span className="font-medium truncate text-white">
-                            {user.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-mono bg-background px-2 py-1 rounded text-white">
-                            {user.score} pts
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                ) : (
-                  <p className="text-muted-foreground text-center py-8 text-white">
-                    {isConnected
-                      ? "Waiting for players to join..."
-                      : "Connect to see players"}
-                  </p>
-                )}
+            <Card className="glass-panel p-6 flex flex-col items-center justify-center text-center gap-4">
+              <div className="p-4 bg-yellow-500/20 rounded-full">
+                <Trophy className="w-10 h-10 text-yellow-400" />
               </div>
+              <h3 className="text-3xl leaguegothic uppercase text-white">
+                Standings
+              </h3>
+              <p className="text-white/80 text-sm">
+                Check your rank in Round {currentRound + 1} or Overall.
+              </p>
+              <Button
+                size="lg"
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                onClick={() => setIsLeaderboardOpen(true)}
+              >
+                View Leaderboard
+              </Button>
             </Card>
 
             {/* Quick Info */}

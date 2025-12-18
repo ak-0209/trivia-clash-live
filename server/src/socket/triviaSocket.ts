@@ -5,6 +5,7 @@ import Lobby, { ILobby } from "../models/lobby";
 import Question from "../models/question";
 import Round from "../models/Round";
 import mongoose from "mongoose";
+import GameSession from "../models/GameSession";
 
 interface AuthenticatedSocket
   extends Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any> {
@@ -46,6 +47,8 @@ class TriviaSocket {
     }
 
     this.io = new SocketServer(server, {
+      pingTimeout: 60000,
+      pingInterval: 25000,
       cors: {
         origin: frontendOrigin,
         methods: ["GET", "POST"],
@@ -539,17 +542,17 @@ class TriviaSocket {
     console.log(`🎮 Host ending game for lobby: ${lobbyId}`);
 
     // NEW: Disconnect all players in this lobby
-    const roomSockets = this.io.sockets.adapter.rooms.get(lobbyId);
-    if (roomSockets) {
-      roomSockets.forEach((socketId) => {
-        const playerSocket = this.io.sockets.sockets.get(socketId);
-        if (playerSocket && playerSocket.id !== socket.id) {
-          // Don't disconnect the host
-          playerSocket.disconnect(true); // Force disconnect
-          console.log(`Disconnected player ${socketId} from lobby ${lobbyId}`);
-        }
-      });
-    }
+    // const roomSockets = this.io.sockets.adapter.rooms.get(lobbyId);
+    // if (roomSockets) {
+    //   roomSockets.forEach((socketId) => {
+    //     const playerSocket = this.io.sockets.sockets.get(socketId);
+    //     if (playerSocket && playerSocket.id !== socket.id) {
+    //       // Don't disconnect the host
+    //       playerSocket.disconnect(true); // Force disconnect
+    //       console.log(`Disconnected player ${socketId} from lobby ${lobbyId}`);
+    //     }
+    //   });
+    // }
 
     this.endGame(lobbyId);
   }
@@ -657,6 +660,7 @@ class TriviaSocket {
   }
 
   // NEW: Handle host round change
+  // NEW: Handle host round change with SAFETY CHECK
   private async handleHostChangeRound(
     socket: AuthenticatedSocket,
     data: {
@@ -668,43 +672,122 @@ class TriviaSocket {
   ) {
     const { lobbyId, roundId, roundIndex, roundName } = data;
 
-    // ADD NULL CHECK
     if (!roundId) {
       console.error("Round ID is required for round change");
       return;
     }
 
-    console.log(
-      `🎮 Host changing to round ${roundIndex} (${roundName}) with ID: ${roundId} in lobby: ${lobbyId}`,
-    );
+    const existingLobby = await this.getLobby(lobbyId);
+    if (!existingLobby) return;
 
-    // Get current round ID before changing
+    // ======================================================
+    // 1. SAVE PROGRESS OF THE *PREVIOUS* ROUND
+    // ======================================================
+
+    // We use the DB to find what round we were just on (handles refreshes/crashes)
+    const allRounds = await Round.find({}).sort({ order: 1 });
+    const prevRoundIndex = existingLobby.currentRound;
+    let prevRoundId: string | undefined = undefined;
+
+    // Get the ID of the round we are leaving
+    if (
+      prevRoundIndex !== undefined &&
+      prevRoundIndex >= 0 &&
+      prevRoundIndex < allRounds.length
+    ) {
+      prevRoundId = allRounds[prevRoundIndex]._id.toString();
+    }
+
+    // Clone existing progress
+    let updatedRoundProgress = existingLobby.roundProgress
+      ? [...existingLobby.roundProgress]
+      : [];
+
+    // If we are leaving a valid round, SAVE where we stopped
+    if (prevRoundId && prevRoundId !== roundId) {
+      const currentIndex = existingLobby.currentQuestionIndex || 0;
+      // Assume next time we start at (Current + 1)
+      const nextIndexToSave = currentIndex + 1;
+
+      const prevEntryIndex = updatedRoundProgress.findIndex(
+        (p) => p.roundId === prevRoundId,
+      );
+
+      const newEntry = {
+        roundId: prevRoundId,
+        nextQuestionIndex: nextIndexToSave,
+        isCompleted: false, // We left mid-round, so it's not complete
+      };
+
+      if (prevEntryIndex > -1) {
+        // Only update if we advanced further
+        if (
+          updatedRoundProgress[prevEntryIndex].nextQuestionIndex <
+          nextIndexToSave
+        ) {
+          updatedRoundProgress[prevEntryIndex] = newEntry;
+        }
+      } else {
+        updatedRoundProgress.push(newEntry);
+      }
+      console.log(
+        `💾 Auto-saved Round ${prevRoundIndex} (ID: ${prevRoundId}) progress at Q-${nextIndexToSave}`,
+      );
+    }
+
+    // ======================================================
+    // 2. CHECK & LOAD *NEW* ROUND
+    // ======================================================
+    const history = updatedRoundProgress.find((p) => p.roundId === roundId);
+
+    // BLOCK if completed
+    if (history?.isCompleted) {
+      socket.emit("error", {
+        message: `Round "${roundName}" is already completed!`,
+      });
+      return;
+    }
+
+    // RESUME from saved index
+    const savedIndex = history ? history.nextQuestionIndex : 0;
+
+    // ======================================================
+    // 3. ACTIVATE AND UPDATE
+    // ======================================================
+
+    const isSameRound = existingLobby.currentRound === roundIndex;
     const currentRoundId = this.currentRoundIds.get(lobbyId);
 
-    // Deactivate current round if exists
-    if (currentRoundId) {
+    if (currentRoundId && !isSameRound) {
       await this.deactivateRound(currentRoundId);
     }
 
-    // Activate the new round
     await this.activateRound(roundId);
 
-    // Update current round tracking
     this.currentRounds.set(lobbyId, roundIndex);
-    this.currentRoundIds.set(lobbyId, roundId); // Now TypeScript knows roundId is not undefined
+    this.currentRoundIds.set(lobbyId, roundId);
 
-    // Get total questions in the new round
     const totalQuestionsInRound = await this.getTotalQuestionsInRoundById(
       roundId,
     );
 
-    // Update lobby in database
-    await this.updateLobby(lobbyId, {
+    // Update DB with NEW status AND the SAVED progress array
+    const updates: Partial<ILobby> = {
       currentRound: roundIndex,
       totalQuestionsInRound: totalQuestionsInRound,
-    });
+      roundProgress: updatedRoundProgress, // <--- SAVES THE PREVIOUS ROUND DATA
 
-    // Broadcast round change to all players
+      // If same round, stay. If new round, jump to saved index.
+      currentQuestionIndex: isSameRound
+        ? existingLobby.currentQuestionIndex
+        : savedIndex,
+      currentQuestion: isSameRound ? existingLobby.currentQuestion : null,
+      status: "waiting",
+      gameState: isSameRound ? existingLobby.gameState : "lobby",
+    };
+
+    await this.updateLobby(lobbyId, updates);
+
     this.io.to(lobbyId).emit("lobby-update", {
       type: "round-changed",
       data: {
@@ -712,26 +795,49 @@ class TriviaSocket {
         roundIndex,
         roundName,
         totalQuestionsInRound,
+        currentQuestionIndex: isSameRound
+          ? existingLobby.currentQuestionIndex
+          : savedIndex,
         message: `Now playing: ${roundName}`,
       },
     });
 
+    if (savedIndex > 0 && !isSameRound) {
+      socket.emit("error", {
+        message: `Resuming from Question ${savedIndex + 1}`,
+      });
+    }
+
     console.log(
-      `Round ${roundIndex} (${roundName}) activated with ${totalQuestionsInRound} questions`,
+      `Round ${roundIndex} active. Resuming at ${savedIndex}. Previous round saved.`,
     );
   }
 
-  // Handle host connection with state persistence
   private async handleHostConnection(
     socket: AuthenticatedSocket,
     lobbyId: string,
   ) {
     try {
+      // 1. Get from DB
       const lobby = await this.getLobby(lobbyId);
       if (!lobby) {
         socket.emit("error", { message: "Lobby not found" });
         return;
       }
+
+      // =========================================================
+      // 🚨 CRASH RECOVERY FIX STARTS HERE 🚨
+      // If memory is empty, but DB has a round, RESTORE IT TO MEMORY
+      if (lobby.currentRound !== undefined && lobby.currentRound !== -1) {
+        // Only set if memory doesn't have it yet
+        if (!this.currentRounds.has(lobbyId)) {
+          console.log(
+            `♻️ Restoring Round ${lobby.currentRound} from DB to Memory`,
+          );
+          this.currentRounds.set(lobbyId, lobby.currentRound);
+        }
+      }
+      // =========================================================
 
       console.log(`🎮 Host connection attempt for lobby ${lobbyId}:`, {
         existingHost: lobby.host,
@@ -749,34 +855,36 @@ class TriviaSocket {
       let remainingTime = 0;
       if (
         lobby.status === "in-progress" &&
-        this.questionStartTimes.has(lobbyId) &&
-        this.questionTimeLimits.has(lobbyId)
+        lobby.startTime // Use DB start time for crash recovery
       ) {
-        const startTime = this.questionStartTimes.get(lobbyId)!;
-        const timeLimit = this.questionTimeLimits.get(lobbyId)!;
+        const startTime = new Date(lobby.startTime).getTime();
+        const timeLimit = lobby.currentQuestion?.timeLimit || 30; // Get limit from DB question
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         remainingTime = Math.max(0, timeLimit - elapsed);
-        console.log(
-          `⏰ Timer calculation for reconnecting host: ${timeLimit}s - ${elapsed}s = ${remainingTime}s remaining`,
-        );
+
+        // Restore memory maps for timer if missing
+        if (!this.questionStartTimes.has(lobbyId) && remainingTime > 0) {
+          this.questionStartTimes.set(lobbyId, startTime);
+          this.questionTimeLimits.set(lobbyId, timeLimit);
+        }
       }
 
       // Total rounds
       const totalRounds = await this.getTotalRounds();
 
-      // Current round tracking (may be -1 when game hasn't started)
+      // NOW this will be correct because we restored it from DB above
       const currentRoundIndex = this.currentRounds.get(lobbyId) ?? -1;
-      let currentRoundId = this.currentRoundIds.get(lobbyId); // string | undefined
+
+      let currentRoundId = this.currentRoundIds.get(lobbyId);
       let totalQuestionsInRound = 0;
 
       // If we have a valid round index, initialize/ensure roundId and question count
       if (currentRoundIndex >= 0) {
-        // Use index-based API to get total questions (avoids needing an ID)
         totalQuestionsInRound = await this.getTotalQuestionsInRoundByIndex(
           currentRoundIndex,
         );
 
-        // If we don't yet have a roundId in memory, try to set it from DB
+        // If we don't yet have a roundId in memory, try to set it from DB logic
         if (!currentRoundId) {
           const rounds = await Round.find({}).sort({ order: 1 });
           if (currentRoundIndex < rounds.length) {
@@ -789,7 +897,8 @@ class TriviaSocket {
         }
       }
 
-      // Update the lobby's host info and round metadata in DB
+      // Update the lobby's host info
+      // NOTE: We use currentRoundIndex here, which is now guaranteed to be correct
       await this.updateLobby(lobbyId, {
         host: {
           userId: socket.user!._id,
@@ -808,6 +917,7 @@ class TriviaSocket {
 
       // Send current game state to host
       const updatedLobby = await this.getLobby(lobbyId);
+
       if (updatedLobby) {
         socket.emit("lobby-joined", {
           lobby: this.formatLobbyForClient(updatedLobby),
@@ -819,22 +929,6 @@ class TriviaSocket {
           totalQuestionsInRound,
           gameStarted: currentRoundIndex >= 0,
         });
-
-        console.log(
-          `🎮 Host ${
-            isNewHost ? "assigned" : "reconnected"
-          } to lobby ${lobbyId}`,
-          {
-            status: updatedLobby.status,
-            gameState: updatedLobby.gameState,
-            currentQuestionIndex: updatedLobby.currentQuestionIndex,
-            totalRounds,
-            currentRound: currentRoundIndex,
-            totalQuestionsInRound,
-            wasGameInProgress,
-            remainingTime,
-          },
-        );
       }
     } catch (error) {
       console.error("Error handling host connection:", error);
@@ -964,6 +1058,7 @@ class TriviaSocket {
           email: socket.user!.emailId,
           score: 0, // New player starts with 0
           joinedAt: new Date(),
+          roundScores: [],
           socketId: socket.id,
           hasAnsweredCurrentQuestion: false,
           lastAnswerTime: undefined,
@@ -1090,46 +1185,35 @@ class TriviaSocket {
     const userId = socket.user!._id;
     const lobbyId = this.userLobbyMap.get(userId);
 
-    if (!lobbyId) {
-      console.log(`No lobby found for user ${userId}`);
-      return;
-    }
+    if (!lobbyId) return;
 
     try {
       const lobby = await this.getLobby(lobbyId);
-      if (!lobby) {
-        console.log(`Lobby ${lobbyId} not found`);
-        return;
-      }
+      if (!lobby) return;
 
       if (lobby.gameState !== "question") {
-        console.log(
-          `Game state is not 'question', current state: ${lobby.gameState}`,
-        );
         socket.emit("error", { message: "Cannot submit answer now" });
         return;
       }
 
       const currentQuestion = lobby.currentQuestion;
-      if (!currentQuestion) {
-        console.log("No current question found");
-        return;
-      }
+      if (!currentQuestion) return;
 
-      // CHECK IF USER ALREADY ANSWERED THIS QUESTION
+      // 1. Check if user already answered
       const player = lobby.players.find((p) => p.userId === userId);
       if (player?.hasAnsweredCurrentQuestion) {
-        console.log(`User ${userId} already answered this question`);
         socket.emit("error", {
           message: "You have already answered this question",
         });
         return;
       }
 
-      // CALCULATE ANSWER TIME AND POINTS
+      // 2. Validate Timer
       const questionStartTime = this.questionStartTimes.get(lobbyId);
       if (!questionStartTime) {
-        console.log("No question start time found");
+        socket.emit("error", {
+          message: "Session sync error. Please wait for next question.",
+        });
         return;
       }
 
@@ -1137,60 +1221,64 @@ class TriviaSocket {
       const timeTakenSeconds = (answerTime - questionStartTime) / 1000;
       const timeLimit = currentQuestion.timeLimit || 30;
 
-      // Check if answer is within time limit
       if (timeTakenSeconds > timeLimit) {
-        console.log(
-          `User ${userId} answered after time limit: ${timeTakenSeconds}s`,
-        );
         socket.emit("error", { message: "Time limit exceeded" });
         return;
       }
 
-      // CHECK IF ANSWER IS CORRECT
+      // 3. Calculate Score
       const isCorrect = currentQuestion.correctAnswer === data.answer;
-
-      // CALCULATE POINTS BASED ON SPEED AND CORRECTNESS
       let pointsEarned = 0;
 
       if (isCorrect) {
-        // Base points for correct answer
         const basePoints = currentQuestion.points || 100;
-
-        // Speed bonus: faster answers get more points
         const speedFactor = 1 - Math.pow(timeTakenSeconds / timeLimit, 2);
         pointsEarned = Math.max(
           Math.floor(basePoints * speedFactor),
-          Math.floor(basePoints * 0.1), // Minimum 10% of base points for correct answer
+          Math.floor(basePoints * 0.1),
         );
-
-        console.log(
-          `✅ ${
-            socket.user!.full_name
-          } answered correctly in ${timeTakenSeconds.toFixed(
-            1,
-          )}s: ${pointsEarned} points`,
-        );
-      } else {
-        console.log(
-          `❌ ${socket.user!.full_name} answered incorrectly: "${data.answer}"`,
-        );
-        pointsEarned = 0;
       }
 
-      // UPDATE PLAYER SCORE AND MARK AS ANSWERED
+      // 4. Get Current Round ID to update specific round score
+      const currentRoundId = this.currentRoundIds.get(lobbyId);
+
+      // 5. UPDATE PLAYER SCORES (Total + Round)
       const updatedPlayers = lobby.players.map((p) => {
         if (p.userId === userId) {
-          const newScore = p.score + pointsEarned;
+          const newTotalScore = p.score + pointsEarned;
+
+          // ✅ NEW: Update Round Score
+          // Initialize if undefined (migration safety)
+          let currentRoundScores = p.roundScores || [];
+
+          if (currentRoundId) {
+            const roundIndex = currentRoundScores.findIndex(
+              (r) => r.roundId === currentRoundId,
+            );
+            if (roundIndex > -1) {
+              // Add to existing round score
+              currentRoundScores[roundIndex].score += pointsEarned;
+            } else {
+              // Initialize this round
+              currentRoundScores.push({
+                roundId: currentRoundId,
+                score: pointsEarned,
+              });
+            }
+          }
+
           console.log(
-            `📊 Updating ${socket.user!.full_name}'s score: ${
-              p.score
-            } + ${pointsEarned} = ${newScore}`,
+            `📊 ${
+              socket.user!.full_name
+            }: +${pointsEarned} pts. Total: ${newTotalScore}`,
           );
+
           return {
             userId: p.userId,
             name: p.name,
             email: p.email,
-            score: newScore, // ADD POINTS TO EXISTING SCORE
+            score: newTotalScore, // Update Total
+            roundScores: currentRoundScores, // ✅ Update Round Array
             joinedAt: p.joinedAt,
             socketId: p.socketId,
             hasAnsweredCurrentQuestion: true,
@@ -1207,7 +1295,7 @@ class TriviaSocket {
 
       if (!updatedLobby) return;
 
-      // Send confirmation to the player who answered
+      // 6. Emit Events
       socket.emit("answer-submitted", {
         success: true,
         isCorrect,
@@ -1215,7 +1303,6 @@ class TriviaSocket {
         timeTaken: timeTakenSeconds.toFixed(1),
       });
 
-      // BROADCAST SCORE UPDATE WITH MORE DETAILS
       this.io.to(lobbyId).emit("lobby-update", {
         type: "score-updated",
         data: {
@@ -1230,7 +1317,6 @@ class TriviaSocket {
         },
       });
 
-      // UPDATE ANSWERED COUNT FOR HOST
       const answeredCount = updatedPlayers.filter(
         (p) => p.hasAnsweredCurrentQuestion,
       ).length;
@@ -1243,10 +1329,6 @@ class TriviaSocket {
           waitingCount: updatedPlayers.length - answeredCount,
         },
       });
-
-      console.log(
-        `📊 Answered count: ${answeredCount}/${updatedPlayers.length}`,
-      );
     } catch (error) {
       console.error("Error handling answer submission:", error);
       socket.emit("error", { message: "Failed to submit answer" });
@@ -1304,10 +1386,11 @@ class TriviaSocket {
           userId: player.userId,
           name: player.name,
           email: player.email,
-          score: player.score, // KEEP THE SCORE - DON'T RESET IT
+          score: player.score,
+          roundScores: player.roundScores,
           joinedAt: player.joinedAt,
           socketId: player.socketId,
-          hasAnsweredCurrentQuestion: false, // Only reset answer tracking
+          hasAnsweredCurrentQuestion: false,
           lastAnswerTime: undefined,
           lastAnswerCorrect: undefined,
         };
@@ -1328,88 +1411,166 @@ class TriviaSocket {
   // End question
   private async endQuestion(lobbyId: string) {
     try {
-      // CLEAR TIMERS FIRST
       this.clearLobbyTimers(lobbyId);
-
       const lobby = await this.getLobby(lobbyId);
       if (!lobby) return;
 
-      // CHANGED: Set gameState to "results" to show answers
+      const currentRoundId = this.currentRoundIds.get(lobbyId);
+      const totalQuestions = lobby.totalQuestionsInRound || 0;
+
+      // Calculate Next Index
+      const nextIndex = (lobby.currentQuestionIndex || 0) + 1;
+      const isLastQuestion = nextIndex >= totalQuestions;
+
+      // Update Progress Array in Database
+      let updatedRoundProgress = lobby.roundProgress
+        ? [...lobby.roundProgress]
+        : [];
+
+      if (currentRoundId) {
+        const existingEntryIndex = updatedRoundProgress.findIndex(
+          (p) => p.roundId === currentRoundId,
+        );
+
+        const newEntry = {
+          roundId: currentRoundId,
+          nextQuestionIndex: nextIndex,
+          isCompleted: isLastQuestion,
+        };
+
+        if (existingEntryIndex > -1) {
+          updatedRoundProgress[existingEntryIndex] = newEntry;
+        } else {
+          updatedRoundProgress.push(newEntry);
+        }
+      }
+
       const updatedLobby = await this.updateLobby(lobbyId, {
-        status: "waiting", // Keep status as waiting for next question
-        gameState: "results", // Change gameState to results to show answers
+        status: "waiting",
+        gameState: "results",
+        roundProgress: updatedRoundProgress, // Commit to DB
       });
 
       if (!updatedLobby) return;
+
+      // Leaderboard Logic
+      const leaderboard = updatedLobby.players
+        .map((p) => {
+          const roundEntry = p.roundScores?.find(
+            (r) => r.roundId === currentRoundId,
+          );
+          return {
+            userId: p.userId,
+            name: p.name,
+            score: p.score,
+            roundScore: roundEntry ? roundEntry.score : 0,
+            lastAnswerCorrect: p.lastAnswerCorrect,
+          };
+        })
+        .sort((a, b) => b.roundScore - a.roundScore);
 
       this.io.to(lobbyId).emit("lobby-update", {
         type: "question-ended",
         data: {
           correctAnswer: lobby.currentQuestion?.correctAnswer,
-          leaderboard: updatedLobby.players
-            .sort((a, b) => b.score - a.score)
-            .map((p) => ({
-              userId: p.userId,
-              name: p.name,
-              score: p.score,
-              lastAnswerCorrect: p.lastAnswerCorrect,
-            })),
+          leaderboard: leaderboard,
+          isRoundOver: isLastQuestion,
         },
       });
 
-      console.log(`Question ended in lobby ${lobbyId}, showing results`);
+      console.log(
+        `✅ Round ${currentRoundId} Progress Saved: Next Index ${nextIndex}`,
+      );
     } catch (error) {
       console.error("Error ending question:", error);
     }
   }
 
   // End game
+  // End game and archive data
   private async endGame(lobbyId: string) {
     try {
       const lobby = await Lobby.findOne({ id: lobbyId });
       if (!lobby) return;
 
-      // CRITICAL FIX: Deactivate ALL rounds when game ends
-      await Round.updateMany({}, { $set: { isActive: false } });
+      console.log(`🎮 Ending game for lobby: ${lobbyId}`);
 
-      // Remove all players from lobby
-      lobby.players = [];
+      // 1. Prepare final scores
+      const rankedPlayers = [...lobby.players]
+        .sort((a, b) => b.score - a.score)
+        .map((player, index) => ({
+          userId: player.userId,
+          name: player.name,
+          score: player.score,
+          rank: index + 1,
+        }));
 
-      lobby.status = "waiting";
-      lobby.currentQuestion = null;
-      lobby.currentQuestionIndex = 0;
-      lobby.currentRound = -1; // Already -1, keep it
-      lobby.totalQuestionsInRound = 0;
+      // 2. Save to GameSession (for if user refreshes page)
+      let gameSessionId = null;
+      try {
+        const gameSession = await GameSession.create({
+          lobbyId: lobby.id,
+          gameName: lobby.name,
+          players: rankedPlayers,
+          endedAt: new Date(),
+        });
+        gameSessionId = gameSession._id.toString();
+        console.log(`📂 Saved game session: ${gameSessionId}`);
+      } catch (error) {
+        console.error("Failed to save game session:", error);
+      }
 
-      // FIX: Also clear host to force reconnection with fresh state
-      lobby.host = undefined;
-
-      await lobby.save();
-
-      // Reset all round tracking
-      this.currentRounds.set(lobbyId, -1); // Set to -1
-      this.currentRoundIds.delete(lobbyId);
-
-      // Clear any active timers
-      this.clearLobbyTimers(lobbyId);
-
-      // Notify all players that the game has ended and they've been removed
+      // 3. Send ALL data to frontend RIGHT NOW
       this.io.to(lobbyId).emit("lobby-update", {
         type: "game-ended",
         data: {
-          message: "Game ended by host",
-          lobby: {
-            ...lobby.toObject(),
-            currentRound: -1, // Make sure this is -1
-          },
+          leaderboard: rankedPlayers,
+          gameSessionId: gameSessionId,
+          lobbyName: lobby.name,
         },
       });
 
-      console.log(
-        `🎮 Game ended by host, all players removed from lobby ${lobbyId}. All rounds deactivated.`,
-      );
+      console.log(`📨 Sent game-ended with ${rankedPlayers.length} players`);
+
+      // 4. Force Disconnect Players
+      // This kicks them off the socket so they don't try to send more data
+      // fetchSockets() returns RemoteSocket[], we need to cast or use carefully
+      const roomSockets = await this.io.in(lobbyId).fetchSockets();
+      for (const s of roomSockets) {
+        // We cast to access the 'user' property we added in authentication
+        const authSocket = s as unknown as AuthenticatedSocket;
+
+        // Remove from your internal tracking map
+        if (authSocket.user) {
+          this.userLobbyMap.delete(authSocket.user._id);
+        }
+
+        // Force disconnect the socket
+        s.disconnect(true);
+      }
+
+      // 5. WIPE PLAYERS FROM DB
+      // We empty the array completely to ensure no one is "stuck" in the lobby
+      lobby.players = [];
+
+      // Reset lobby state for next game
+      lobby.status = "waiting";
+      lobby.currentQuestion = null;
+      lobby.currentQuestionIndex = 0;
+      lobby.currentRound = -1;
+      lobby.gameState = "lobby";
+      lobby.roundProgress = [];
+
+      await lobby.save();
+
+      // Reset memory tracking
+      this.currentRounds.set(lobbyId, -1);
+      this.currentRoundIds.delete(lobbyId);
+      this.clearLobbyTimers(lobbyId);
+
+      console.log(`✅ Lobby reset and players disconnected.`);
     } catch (error) {
-      console.error("Error ending game:", error);
+      console.error("Error in endGame:", error);
     }
   }
 
