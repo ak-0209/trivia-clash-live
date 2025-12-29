@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
+import { Volume2, VolumeX, RefreshCw, Radio, RefreshCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 declare global {
@@ -292,14 +292,37 @@ const StreamView = ({
   };
 
   return (
-    <Card className="glass-panel overflow-hidden border-2 border-red-500">
+    <Card className="glassmorphism-medium overflow-hidden border-none">
       <div className="p-4 border-b border-border bg-white-600 text-white">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2">
-            <Radio className="w-5 h-5 animate-pulse" />
-            <h2 className="text-2xl leaguegothic">🔴 LIVE STREAM</h2>
+            <img src="logo2.png" alt="" style={{width:"2.25rem", height:"2.25rem"}}/>
+            <h2 className="text-2xl leaguegothic"></h2>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center">
+            <div className="flex items-center gap-2 rounded-l-2xl rounded-r-none px-3 py-2 border border-white/10">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-white">LIVE</span>
+            </div>
+
+            {/* Mute All */}
+            <button onClick={handleHostMuteToggle} className="flex items-center gap-2 px-4 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 transition border border-white/10">
+              <VolumeX size={16} />
+              {currentMuted ? "Unmute All" : "Mute All"}
+            </button>
+
+            {/* Refresh */}
+            <button onClick={handleRefresh} className="flex rounded-r-2xl rounded-l-none items-center gap-2 px-4 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 transition border border-white/10">
+              <RefreshCcw size={16} />
+              Refresh
+            </button>
+
+          </div>
+          {/* <div className="flex items-center gap-2">
             {isHost && (
               <Button
                 variant="secondary"
@@ -324,7 +347,7 @@ const StreamView = ({
               <RefreshCw className="w-4 h-4" />
               Refresh
             </Button>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -375,7 +398,7 @@ const StreamView = ({
         <div ref={containerRef} className="w-full h-full relative z-10" />
       </div>
 
-      <div className="p-3 bg-white-500 text-white border-t border-white-600">
+      {/* <div className="p-3 bg-white-500 text-white border-t border-white-600">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="bg-white text-red-600">
@@ -389,7 +412,7 @@ const StreamView = ({
             {currentMuted ? "🔇 MUTED" : "🔊 LIVE AUDIO"}
           </span>
         </div>
-      </div>
+      </div> */}
     </Card>
   );
 };

@@ -12,6 +12,10 @@ import {
   X,
   List,
   Trophy,
+  ArrowUpRight,
+  Shuffle,
+  Zap,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import StreamView from "@/components/StreamView";
@@ -26,6 +30,7 @@ import {
 import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
 import dressingroom from "@/assets/dressingroom.webp";
 import { LeaderboardSidebar } from "./LeaderBoard";
+import { LeaderboardCard } from "./LeaderboardList";
 // Types for rounds
 interface Round {
   id: string;
@@ -909,251 +914,266 @@ const Host = () => {
         currentRoundIndex={currentRound}
       />
       <div className="hostpanel-wrapper">
-        {/* Header */}
-        <header className="hostpanel-header">
-          <div className="hostpanel-header-left flex flex-col items-center">
-            <div className="hostpanel-title leaguegothic">HOST PANEL</div>
-            <div className="flex flex-col gap-3">
-              {/* In your header section, update the round display */}
-              <div className="status-row">
-                <div className="glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
-                  {gameStatus === "active"
-                    ? "🔴 LIVE"
-                    : gameStatus === "countdown"
-                    ? "⏰ COUNTDOWN"
-                    : gameStatus === "paused"
-                    ? "⏸️ PAUSED"
-                    : gameStatus === "results"
-                    ? "📊 RESULTS"
-                    : "⏹️ WAITING"}
-                </div>
-
-                {/* SIMPLIFY THIS LOGIC */}
-                <span className="question-status">
-                  {currentRound >= 0 ? (
-                    <>
-                      Round {currentRound + 1} of {totalRounds}:{" "}
-                      {getCurrentRoundName()} - Question{" "}
-                      {Math.max(currentQuestion, 0)} / {totalQuestionsInRound}
-                    </>
-                  ) : (
-                    "Game not started. Ready to begin."
-                  )}
-                </span>
-
-                {gameStatus === "countdown" && (
-                  <span className="countdown ml-4 text-2xl font-bold text-yellow-300">
-                    {countdown}s
-                  </span>
+        <div className="hostpanel-header-left flex items-center justify-between">
+          <div className="hostpanel-title leaguegothic leading-none italic">HOST PANEL</div>
+          <div className="flex flex-col gap-3">
+            {/* In your header section, update the round display */}
+            {/* <div className="status-row">
+              <div className="glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
+                {gameStatus === "active"
+                  ? "🔴 LIVE"
+                  : gameStatus === "countdown"
+                  ? "⏰ COUNTDOWN"
+                  : gameStatus === "paused"
+                  ? "⏸️ PAUSED"
+                  : gameStatus === "results"
+                  ? "📊 RESULTS"
+                  : "⏹️ WAITING"}
+              </div>
+              <span className="question-status">
+                {currentRound >= 0 ? (
+                  <>
+                    Round {currentRound + 1} of {totalRounds}:{" "}
+                    {getCurrentRoundName()} - Question{" "}
+                    {Math.max(currentQuestion, 0)} / {totalQuestionsInRound}
+                  </>
+                ) : (
+                  "Game not started. Ready to begin."
                 )}
-              </div>
-              <div className="justify-center glassmorphism-light flex items-center gap-2 text-white mt-0 p-2 bg-muted/30 rounded-lg">
-                {isConnected ? "🟢 CONNECTED" : "🔴 DISCONNECTED"}
-              </div>
+              </span>
+
+              {gameStatus === "countdown" && (
+                <span className="countdown ml-4 text-2xl font-bold text-yellow-300">
+                  {countdown}s
+                </span>
+              )}
+            </div> */}
+            <div
+              className={`
+                flex items-center gap-3 px-5 py-2 rounded-full glassmorphism-medium
+                ${
+                  isConnected
+                    ? "border-green-500 text-green-500"
+                    : "border-red-500 text-red-500"
+                }
+              `}
+            >
+              {/* Status Dot */}
+              <span
+                className={`
+                  w-3 h-3 rounded-full
+                  ${
+                    isConnected
+                      ? "bg-green-500 shadow-[0_0_8px_#22c55e]"
+                      : "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                  }
+                `}
+              />
+
+              {/* Status Text */}
+              <span className="text-sm font-semibold tracking-wide">
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
             </div>
+
           </div>
-        </header>
+        </div>
 
         <div className="hostpanel-grid">
           {/* LEFT COLUMN */}
           <div className="left-column">
-            <Card className="glassmorphism-medium px-4 py-4 flex flex-col gap-4">
-              <h2 className="section-title text-4xl leaguegothic uppercase">
-                Live Stream Manager
-              </h2>
-              <div className="stream-grid flex flex-col gap-4">
-                <div className="flex flex-col gap-4">
-                  <h3>📡 Stream Source</h3>
-                  <StreamView
-                    youtubeUrl={currentStreamUrl}
-                    isMuted={isStreamMuted}
-                    onMuteToggle={handleStreamMuteToggle}
-                    isHost={true}
-                  />
-                </div>
+            <StreamView
+              youtubeUrl={currentStreamUrl}
+              isMuted={isStreamMuted}
+              onMuteToggle={handleStreamMuteToggle}
+              isHost={true}
+            />
+
+            {/* <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
+              <div className="px-6 py-4 border-b border-white/30 bg-white/5">
+                <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
+                  Game Controls
+                </h2>
               </div>
-            </Card>
 
-            <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
-              <h2 className="text-4xl leaguegothic uppercase">
-                Round Controls
+              <div className="p-6 space-y-6">
+                <div className="flex justify-between items-center px-4 py-2 bg-black/40 rounded-lg border border-white/10">
+                  <span className="text-xs font-bold uppercase tracking-widest text-gray-400">System Status</span>
+                  <span className="text-sm font-bold text-[#ffae00] flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                    </span>
+                    {gameStarted ? "IN PROGRESS" : "READY TO START"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  
+                  <div className="justify-between flex flex-col p-6 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-bold uppercase tracking-tighter">Option 1: Instant</h3>
+                      <p className="text-[10px] text-white/50 uppercase tracking-widest">No delay, game starts now</p>
+                    </div>
+
+                    <button 
+                      onClick={handleStartImmediately}
+                      className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00] hover:scale-[1.02] active:scale-95 text-white py-4 rounded-xl transition-all shadow-lg"
+                    >
+                      <div className="bg-white/20 rounded-full p-1">
+                        <Play size={14} fill="white" className="ml-0.5" />
+                      </div>
+                      <span className="inter text-sm tracking-widest uppercase">
+                        {currentQuestion === 0 && !gameStarted ? "Start Game" : "Next Question"}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col p-6 rounded-2xl bg-black/40 border border-white/10 space-y-4">
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-bold uppercase tracking-tighter text-gray-300">Option 2: Timed</h3>
+                      <p className="text-[10px] text-white/50 uppercase tracking-widest">Starts after countdown</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={countdownSeconds}
+                          onChange={(e) => setCountdownSeconds(Number(e.target.value))}
+                          className="w-full bg-black/60 border border-white/20 rounded-lg py-2 px-3 text-center text-xl font-bold focus:border-blue-500 transition-colors text-white"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-white/20 uppercase">Sec</span>
+                      </div>
+
+                      <button 
+                        onClick={handleStartWithCountdown}
+                        className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 py-3 rounded-lg transition-all text-[10px] inter uppercase tracking-[0.2em]"
+                      >
+                        <Clock size={14} />
+                        Start with {countdownSeconds}s Delay
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                <p className="text-center text-[10px] text-white/30 font-medium uppercase tracking-[0.3em]">
+                  {totalQuestionsInRound > 0 && currentQuestion >= totalQuestionsInRound - 1 
+                    ? "Caution: This is the final question in the round" 
+                    : "Select a launch method to proceed"}
+                </p>
+              </div>
+            </Card> */}
+
+            <Card className="glassmorphism-medium p-6 flex flex-col gap-6">
+              <h2 className="text-4xl leaguegothic uppercase tracking-wider">
+                Game Controls
               </h2>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Round Selector */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">
-                    {shouldShowRoundInfo
-                      ? "🏆 Current Round"
-                      : "🏆 Ready to Start"}
-                  </h3>
-                  <div className="space-y-3">
+              <div className="space-y-6">
+                {/* Current Round Info Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <h3 className="text-lg font-semibold uppercase opacity-80">Current Round</h3>
+                    <div className="text-right">
+                      <span className="text-sm font-medium uppercase opacity-60">Status: </span>
+                      <span className="text-green-500 font-bold">
+                        {currentRound >= 0 ? `Round ${currentRound + 1} • Question ${currentQuestion}` : "Lobby"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-black/40 rounded-xl border border-white/10 space-y-2">
                     {shouldShowRoundInfo ? (
                       <>
-                        <div className="p-3 bg-muted/30 rounded-lg glassmorphism-light">
-                          <div className="text-xl font-bold">
-                            Round {currentRound + 1} of {totalRounds}
-                          </div>
-                          <div className="text-sm">{currentRoundName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {totalQuestionsInRound} questions in this round
-                          </div>
+                        <div className="text-xl font-bold">
+                          Round {currentRound + 1} of {totalRounds}
                         </div>
+                        <div className="text-lg opacity-90">{currentRoundName}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {totalQuestionsInRound} questions in this round
+                        </div>
+                        
                         <Button
                           onClick={handleOpenRoundSelector}
-                          variant="outline"
-                          className="w-full"
+                          variant="ghost" // Changed to ghost to remove default border styles
+                          size="sm"
+                          className="relative p-[1px] rounded-full overflow-hidden mt-2 h-9 group shadow-lg"
                         >
-                          <List className="w-4 h-4 mr-2" />
-                          Change Round
+                          {/* The Gradient Border Layer */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+
+                          {/* The Inner Background Content */}
+                          <div className="relative flex items-center justify-center w-full h-full px-4 py-2 bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                            <Shuffle className="w-3 h-3 mr-2 text-white" />
+                            <span className="text-[10px] font-bold text-white tracking-wider">
+                              CHANGE ROUNDS
+                            </span>
+                          </div>
                         </Button>
                       </>
                     ) : (
-                      <div className="p-3 bg-muted/30 rounded-lg glassmorphism-light">
-                        <div className="text-xl font-bold">
-                          Game Not Started
-                        </div>
-                        <div className="text-sm">
-                          Click "Start Game" to begin Round 1
-                        </div>
+                      <div className="py-4 text-center opacity-60">
+                        <p className="text-xl font-bold">Game Not Started</p>
+                        <p className="text-sm">Click "Start Game" below to begin</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Stream URL Control */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">
-                    📡 Stream Source
-                  </h3>
-                  <div className="space-y-3">
-                    <Input
-                      type="text"
-                      value={currentStreamUrl}
-                      onChange={(e) => setCurrentStreamUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      onClick={() => handleStreamUrlChange(currentStreamUrl)}
-                      variant="hero"
-                      className="w-full glassmorphism-light flex items-center gap-2 text-white"
-                    >
-                      <Radio className="w-4 h-4 mr-2" />
-                      Update Live Stream for Everyone
-                    </Button>
+                {/* Action Buttons Section */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                  <Button
+                    onClick={handleOpenStartModal}
+                    disabled={!canStartQuestion}
+                    variant="ghost"
+                    className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                    <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                      <Play className="w-4 h-4 mr-2 text-white" />
+                      <span className="text-xs font-bold text-white tracking-widest uppercase">
+                        {currentRound < 0 ? "START GAME" : "NEXT QUESTION"}
+                      </span>
+                    </div>
+                  </Button>
+                    <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
+                      Start the next question with countdown or immediately
+                    </p>
                   </div>
-                </div>
 
-                {/* Audio Controls */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">
-                    🔊 Audio Control
-                  </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <Button
-                      variant={isStreamMuted ? "outline" : "destructive"}
-                      onClick={() => handleStreamMuteToggle(!isStreamMuted)}
-                      className="w-full flex items-center gap-2"
+                      onClick={handleNextRound}
+                      disabled={currentRound >= totalRounds - 1 || currentRound < 0}
+                      variant="ghost"
+                      className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
                     >
-                      {isStreamMuted ? (
-                        <Volume2 className="w-4 h-4" />
-                      ) : (
-                        <VolumeX className="w-4 h-4" />
-                      )}
-                      {isStreamMuted
-                        ? "Unmute All Players"
-                        : "Mute All Players"}
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                      <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                        <Shuffle className="w-4 h-4 mr-2 text-white" />
+                        <span className="text-xs font-bold text-white tracking-widest uppercase">
+                          NEXT ROUND
+                        </span>
+                      </div>
                     </Button>
-                    <p className="text-sm text-muted-foreground text-center">
-                      {isStreamMuted
-                        ? "All players have muted audio"
-                        : "All players can hear stream"}
+                    <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
+                      Move to the next round
                     </p>
                   </div>
                 </div>
-              </div>
 
-              {/* Stream Status */}
-              <div className="mt-4 p-3 bg-muted/30 rounded-lg glassmorphism-light flex items-center gap-2 text-white">
-                <div
-                  className="flex items-center justify-between flex-wrap gap-4"
-                  style={{ flex: "1 0 0" }}
-                >
-                  <span className="text-sm font-medium">
-                    Live Stream Status:
-                  </span>
-                  <Badge variant="destructive" className="animate-pulse">
-                    🔴 BROADCASTING TO {playerCount} PLAYERS
-                  </Badge>
-                </div>
-              </div>
-            </Card>
-
-            {/* Question Controls */}
-            <Card className="glassmorphism-medium p-6 flex flex-col gap-4">
-              <h2 className="text-4xl leaguegothic uppercase">
-                Question Controls
-              </h2>
-
-              <div className="grid md:grid-cols-2 gap-4 mb-4">
-                <div className="space-y-2">
+                {!(currentRound >= totalRounds - 1 || currentRound < 0) && (
                   <Button
-                    variant="hero"
-                    onClick={handleOpenStartModal}
-                    disabled={!canStartQuestion}
-                    className="w-full glassmorphism-light flex items-center gap-2 text-white"
+                    variant="destructive"
+                    onClick={() => setShowEndGameModal(true)}
+                    className="w-full h-10 text-sm inter uppercase tracking-widest bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 border-none shadow-lg rounded-full text-white"
                   >
-                    <Play className="w-4 h-4 mr-2" />
-                    {/* SIMPLE FIX: Use currentRound instead of gameStarted */}
-                    {currentRound < 0 ? "Start Game" : "Next Question"}
-                  </Button>
-                  <p className="text-sm text-muted-foreground text-center">
-                    {canStartQuestion
-                      ? currentRound < 0
-                        ? "Start the first round of the game"
-                        : "Start the next question with countdown or immediately"
-                      : "Question is currently active"}
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleNextRound}
-                    disabled={currentRound >= totalRounds - 1}
-                    className="w-full"
-                  >
-                    <SkipForward className="w-4 h-4 mr-2" />
-                    Next Round
-                  </Button>
-                  <p className="text-sm text-muted-foreground text-center">
-                    {currentRound >= totalRounds - 1
-                      ? "This is the last round"
-                      : "Move to the next round"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Game State Controls */}
-              <div className="grid gap-4">
-                {gameStatus === "active" && (
-                  <Button
-                    variant="game"
-                    onClick={handleEndQuestion}
-                    className="w-full"
-                  >
-                    End Question Early
+                    End Game
                   </Button>
                 )}
-
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowEndGameModal(true)}
-                  className=""
-                >
-                  End Game
-                </Button>
               </div>
             </Card>
 
@@ -1196,7 +1216,7 @@ const Host = () => {
 
           {/* RIGHT COLUMN */}
           <div className="right-column">
-            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+            {/* <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
               <h3 className="section-title text-4xl leaguegothic uppercase">
                 Player Stats
               </h3>
@@ -1227,9 +1247,46 @@ const Host = () => {
                   />
                 </div>
               </div>
+            </Card> */}
+
+            <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
+              {/* Header remains consistent with your brand */}
+              <div className="px-6 py-4 border-b border-white/30 bg-white/5">
+                <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
+                  Stream Controls
+                </h2>
+              </div>
+
+              <div className="px-6 py-4">
+              <h3 className="text-lg font-semibold mb-3">
+                Stream Source
+              </h3>
+              <div className="space-y-3">
+                <Input
+                  type="text"
+                  value={currentStreamUrl}
+                  onChange={(e) => setCurrentStreamUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
+                  className="font-mono text-sm"
+                />
+                <button onClick={() => handleStreamUrlChange(currentStreamUrl)} className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg">
+                  {/* The Gradient Border Layer */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                  
+                  {/* The Inner Content Area */}
+                  <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
+                    <span className="text-white text-xs font-bold tracking-widest uppercase">
+                      Update
+                    </span>
+                    
+                    <ArrowUpRight size={14} className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </div>
+                </button>
+              </div>
+              </div>
             </Card>
 
-            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+            {/* <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
               <h3 className="section-title text-4xl leaguegothic uppercase">
                 Game Progress
               </h3>
@@ -1274,118 +1331,83 @@ const Host = () => {
                   />
                 </div>
               </div>
-            </Card>
-
-            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h3 className="section-title text-4xl leaguegothic uppercase">
-                Quick Actions
-              </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLeaderboard(true)} // <--- Update click handler
-                className="w-full flex items-center gap-2" // <--- Add styling
-              >
-                <Trophy className="w-4 h-4" /> {/* <--- Change Icon */}
-                View Leaderboard
-              </Button>
-            </Card>
+            </Card> */}
+            <LeaderboardCard 
+              currentRoundIndex={currentRound} 
+              rounds={rounds} 
+            />
           </div>
         </div>
 
-        {/* Start Modal */}
         <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                {currentQuestion === 0 && !gameStarted
-                  ? "Start Game"
-                  : totalQuestionsInRound > 0 &&
-                    currentQuestion >= totalQuestionsInRound - 1
-                  ? "Final Question in Round"
-                  : "Next Question"}
+          <DialogContent className="max-w-3xl border-none p-8 text-white shadow-2xl">
+            <DialogHeader className="mb-8">
+              <DialogTitle className="text-white inter text-center text-sm uppercase tracking-[0.3em]">
+                Select a Launch Method to Proceed
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-6 py-4">
-              {/* Check if last question in round */}
-              {totalQuestionsInRound > 0 &&
-              currentQuestion >= totalQuestionsInRound - 1 ? (
-                <div className="text-center">
-                  <p className="text-lg font-semibold mb-4">
-                    🎯 This is the final question in this round!
-                  </p>
-                  <Button
-                    onClick={handleStartImmediately}
-                    variant="hero"
-                    className="w-full py-6 glassmorphism-light flex items-center gap-2 text-white"
-                  >
-                    <Play className="w-5 h-5 mr-2" />
-                    Start Final Question
-                  </Button>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    After this question, you can move to the next round
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {/* OPTION 1: INSTANT */}
+              <div className="flex flex-col justify-between rounded-3xl border border-white/10 bg-[#111] p-8 transition-colors hover:border-white/20">
+                <div className="space-y-2">
+                  <h3 className="text-3xl leaguegothic italic uppercase tracking-tight text-white">
+                    Option 1: Instant
+                  </h3>
+                  <p className="text-xs inter uppercase tracking-widest text-slate-500">
+                    No delay, game starts now
                   </p>
                 </div>
-              ) : (
-                <>
-                  {/* Immediate Start Option */}
-                  <div className="text-center">
-                    <Button
-                      onClick={handleStartImmediately}
-                      variant="hero"
-                      className="w-full py-6 text-lg glassmorphism-light flex items-center gap-2 text-white"
-                    >
-                      <Play className="w-5 h-5 mr-2" />
-                      {currentQuestion === 0 && !gameStarted
-                        ? "Start Game"
-                        : "Start Immediately"}
-                    </Button>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {currentQuestion === 0 && !gameStarted
-                        ? "Game will begin right away"
-                        : "Question will begin right away"}
-                    </p>
+
+                <div className="mt-20">
+                  <button
+                    onClick={handleStartImmediately}
+                    className="flex w-full leaguegothic items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ff1a00] to-[#ff7a00] py-4 text-2xl uppercase tracking-widest text-white shadow-lg transition-all hover:scale-[1.02] active:scale-95"
+                  >
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
+                      <Play className="h-3 w-3 fill-white text-white" />
+                    </div>
+                    {currentQuestion === 0 && !gameStarted ? "Start Game" : "Next Question"}
+                  </button>
+                </div>
+              </div>
+
+              {/* OPTION 2: TIMED */}
+              <div className="flex flex-col justify-between rounded-3xl border border-white/10 bg-[#111] p-8 transition-colors hover:border-white/20">
+                <div className="space-y-2">
+                  <h3 className="text-3xl leaguegothic italic uppercase tracking-tight text-white">
+                    Option 2: Timed
+                  </h3>
+                  <p className="text-xs inter uppercase tracking-widest text-slate-500">
+                    Starts after countdown
+                  </p>
+                </div>
+
+                <div className="mt-12 space-y-4">
+                  {/* Countdown Input Display */}
+                  <div className="relative flex items-center justify-center rounded-2xl border border-white/10 bg-black py-4">
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={countdownSeconds}
+                      onChange={(e) => setCountdownSeconds(Number(e.target.value))}
+                      className="bg-transparent text-center text-3xl leaguegothic text-white focus:outline-none"
+                    />
+                    <span className=" inter absolute right-6 text-[10px] font-black uppercase tracking-tighter text-slate-600">
+                      Sec
+                    </span>
                   </div>
 
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Or start with countdown
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Countdown Option */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={countdownSeconds}
-                        onChange={(e) =>
-                          setCountdownSeconds(Number(e.target.value))
-                        }
-                        className="text-center text-lg font-semibold"
-                      />
-                      <span className="text-muted-foreground">seconds</span>
-                    </div>
-
-                    <Button
-                      onClick={handleStartWithCountdown}
-                      variant="outline"
-                      className="w-full py-6"
-                    >
-                      <Clock className="w-5 h-5 mr-2" />
-                      Start with {countdownSeconds}s Countdown
-                    </Button>
-                  </div>
-                </>
-              )}
+                  <button
+                    onClick={handleStartWithCountdown}
+                    className="flex w-full items-center justify-center gap-3 rounded-2xl text-2xl border border-white/10 bg-[#1a1a1a] py-4 leaguegothic uppercase tracking-widest text-white transition-all hover:bg-[#222] active:scale-95"
+                  >
+                    <Clock className="h-4 w-4 text-slate-400" />
+                    Start with {countdownSeconds}s Delay
+                  </button>
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -1394,7 +1416,7 @@ const Host = () => {
         <Dialog open={showRoundSelector} onOpenChange={setShowRoundSelector}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-xl">Select Round</DialogTitle>
+              <DialogTitle className="text-xl text-white">Select Round</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
@@ -1413,7 +1435,7 @@ const Host = () => {
                     <Button
                       key={round.id}
                       variant={index === currentRound ? "default" : "outline"}
-                      className="justify-start h-auto p-4 text-left"
+                      className="justify-start h-auto p-4 text-left "
                       onClick={() => {
                         setCurrentRound(index);
                         setCurrentQuestion(0);
@@ -1439,7 +1461,7 @@ const Host = () => {
                       }}
                     >
                       <div className="flex flex-col items-start">
-                        <div className="font-bold">
+                        <div className="font-bold text-white">
                           Round {index + 1}: {round.name}
                           {round.isActive && (
                             <Badge variant="secondary" className="ml-2">
@@ -1512,6 +1534,37 @@ const Host = () => {
             </div>
           </DialogContent>
         </Dialog>
+        {gameStatus === "countdown" && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
+            {/* Decorative Glow Background */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#ff1a00] rounded-full blur-[120px] opacity-20" />
+
+            <div className="relative flex flex-col items-center">
+              {/* Label */}
+              <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-4 animate-pulse">
+                Prepare for Question
+              </span>
+
+              {/* Large Countdown Number */}
+              <div className="relative flex items-center justify-center">
+                <span className="text-[12rem] font-black leading-none bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent drop-shadow-2xl">
+                  {countdown}
+                </span>
+                <span className="absolute -right-8 bottom-8 text-2xl font-black text-[#ff7a00]">
+                  S
+                </span>
+              </div>
+
+              {/* Progress Bar (Visual indicator of time) */}
+              <div className="mt-8 w-64 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#ff1a00] to-[#ff7a00] transition-all duration-1000 ease-linear"
+                  style={{ width: `${(countdown / countdownSeconds) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

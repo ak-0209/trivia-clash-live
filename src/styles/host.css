@@ -1,6 +1,6 @@
 .hostpanel-container {
   min-height: 100vh;
-  padding: 1rem;
+  padding: 2rem 1rem;
   color: #fff;
   display: flex;
   justify-content: center;
@@ -18,14 +18,14 @@
 /* HEADER */
 .hostpanel-header {
   display: flex;
-  justify-content: center;
+  justify-content: start;
   align-items: center;
   /* flex-wrap: wrap; */
   margin-bottom: 1.5rem;
 }
 
 .hostpanel-title {
-  font-size: 5rem;
+  font-size: 4rem;
   color: white;
   margin-bottom: 0.5rem;
 }
@@ -47,7 +47,7 @@
 /* GRID LAYOUT */
 .hostpanel-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1.5fr 1fr;
   gap: 1.5rem;
 }
 
