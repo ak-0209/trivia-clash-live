@@ -9,7 +9,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
+      <Navbar />
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         <div
           className="absolute inset-0 z-0"
@@ -23,12 +23,12 @@ const Index = () => {
 
         <div className="relative z-20 container mx-auto px-4 text-center">
           <div className="herosection">
-            <div className="l1 leaguegothic">TOPCLUB LIVE TRIVIA</div>
+            <div className="l1 leaguegothic">LIVE TRIVIA</div>
             <div className="l2 leaguegothic">
-              Compete in Real-Time. Win Real Money.
+              Compete in Real-Time. Win Prizes.
             </div>
             <div className="l3">
-              Join thousands of players in live trivia games with cash prizes.
+              Join thousands of players in live trivia games with prizes.
               30 minutes of intense competition.
             </div>
           </div>
@@ -121,6 +121,24 @@ const Index = () => {
         </div>
       </section>
     </div>
+  );
+};
+
+const Navbar = () => {
+  const navigate = useNavigate();
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4">
+      {/* Left Part: Logo */}
+      <div 
+        className="flex items-center cursor-pointer" 
+        onClick={() => navigate("/")}
+      >
+        <div className="flex items-center justify-center rounded-lg font-bold">
+          <img src="longlogo.png" alt="" className="h-7"/>
+        </div>
+      </div>
+    </nav>
   );
 };
 
