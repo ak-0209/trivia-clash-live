@@ -80,6 +80,15 @@ const Host = () => {
   );
   const [roundsLoaded, setRoundsLoaded] = useState(false);
 
+  const userDataStr = localStorage.getItem("user");
+  const userData = userDataStr ? JSON.parse(userDataStr) : {};
+
+  // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
+  const currentUserId = userData.id || userData.userId; 
+
+  // If you are in the host panel, you can determine it like this:
+  const isHostPanel = !!localStorage.getItem("hostJwtToken");
+
   const API_BASE = import.meta.env.VITE_API_URL;
 
   // Connect to WebSocket and restore state
@@ -1332,9 +1341,13 @@ const Host = () => {
                 </div>
               </div>
             </Card> */}
-            <LeaderboardCard 
+            {/* <LeaderboardCard 
               currentRoundIndex={currentRound} 
               rounds={rounds} 
+            /> */}
+            <LeaderboardCard 
+              currentRoundIndex={0} 
+              isHost={true} 
             />
           </div>
         </div>

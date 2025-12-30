@@ -19,11 +19,15 @@ interface Round {
 interface LeaderboardCardProps {
   currentRoundIndex: number;
   rounds?: Round[];
+  isHost?: boolean;      // Pass true for Host Panel
+  currentUserId?: string; // Pass the logged-in user's ID for Player Panel
 }
 
 export function LeaderboardCard({
   currentRoundIndex,
   rounds: propRounds,
+  isHost = false,
+  currentUserId,
 }: LeaderboardCardProps) {
   const [selectedRoundId, setSelectedRoundId] = useState<string>("overall");
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
@@ -95,6 +99,28 @@ export function LeaderboardCard({
     return "bg-zinc-800 text-zinc-400 border border-zinc-700";
   };
 
+  /**
+   * Logic to filter who we show:
+   * 1. Always Top 5.
+   * 2. If User is not in Top 5, append them at the end.
+   */
+  const getDisplayPlayers = () => {
+    const top5 = leaderboard.slice(0, 5);
+    
+    if (isHost || !currentUserId) return top5;
+
+    const userRankIndex = leaderboard.findIndex((p) => p.userId === currentUserId);
+    
+    // If player is outside top 5, append them to the list
+    if (userRankIndex >= 5) {
+      return [...top5, leaderboard[userRankIndex]];
+    }
+
+    return top5;
+  };
+
+  const displayPlayers = getDisplayPlayers();
+
   return (
     <Card className="glassmorphism-medium p-6 flex flex-col gap-4 border-white/10">
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
@@ -126,11 +152,10 @@ export function LeaderboardCard({
         >
           OVERALL
         </Button>
-        {activeRounds.slice(0, 3).map((round) => ( // Show first 3 rounds for space
+        {activeRounds.slice(0, 3).map((round) => (
           <Button
             key={round.id}
             onClick={() => setSelectedRoundId(round.id)}
-            // variant="ghost"
             size="sm"
             className={`text-[10px] font-bold h-7 rounded-full border transition-all ${
               selectedRoundId === round.id
@@ -146,28 +171,61 @@ export function LeaderboardCard({
       {/* Player List */}
       <div className="space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
         {isLoading ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-white/20" /></div>
+          <div className="flex justify-center py-10">
+            <Loader2 className="animate-spin text-white/20" />
+          </div>
         ) : leaderboard.length === 0 ? (
           <div className="text-center py-10 text-white/40 text-sm">No scores recorded yet.</div>
         ) : (
-          leaderboard.map((player, index) => (
-            <div
-              key={player.userId}
-              className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/5"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full font-bold text-[10px] ${getRankStyles(index)}`}>
-                  {index + 1}
+          <div className="flex flex-col gap-2">
+            {displayPlayers.map((player, index) => {
+              // Calculate real rank from original leaderboard array
+              const actualRankIndex = leaderboard.findIndex((p) => p.userId === player.userId);
+              const isCurrentUser = player.userId === currentUserId;
+              const isJumpedRank = !isHost && index === 5 && actualRankIndex >= 5;
+
+              return (
+                <div key={player.userId}>
+                  {/* Show "..." divider if there's a gap between Top 5 and the player */}
+                  {isJumpedRank && (
+                    <div className="flex justify-center py-1 opacity-20">
+                      <span className="text-[10px] font-bold tracking-widest text-white">
+                        ••••
+                      </span>
+                    </div>
+                  )}
+
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${
+                      isCurrentUser
+                        ? "bg-white/10 border-white/30 shadow-lg"
+                        : "bg-black/40 border-white/5"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-6 w-6 items-center justify-center rounded-full font-bold text-[10px] ${getRankStyles(
+                          actualRankIndex
+                        )}`}
+                      >
+                        {actualRankIndex + 1}
+                      </div>
+                      <span
+                        className={`font-medium text-sm truncate max-w-[120px] ${
+                          isCurrentUser ? "text-yellow-400" : "text-white"
+                        }`}
+                      >
+                        {player.name} {isCurrentUser && <span className="text-[10px] opacity-60 ml-1">(YOU)</span>}
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-white">
+                      {selectedRoundId === "overall" ? player.score : player.roundScore} pts
+                    </span>
+                  </div>
                 </div>
-                <span className="font-medium text-sm text-white truncate max-w-[120px]">
-                  {player.name}
-                </span>
-              </div>
-              <span className="text-sm font-bold text-white">
-                {selectedRoundId === "overall" ? player.score : player.roundScore} pts
-              </span>
-            </div>
-          ))
+              );
+            })}
+          </div>
         )}
       </div>
     </Card>

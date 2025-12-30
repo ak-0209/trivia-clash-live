@@ -51,6 +51,12 @@
   gap: 1.5rem;
 }
 
+.lobby-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
 .left-column,
 .right-column {
   display: flex;
@@ -168,7 +174,7 @@
 
 /* RESPONSIVE DESIGN */
 @media (max-width: 900px) {
-  .hostpanel-grid {
+  .hostpanel-grid,.lobby-grid {
     grid-template-columns: 1fr;
   }
 }

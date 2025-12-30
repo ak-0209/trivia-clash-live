@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, Tv, Trophy } from "lucide-react";
+import { Users, Clock, Tv, Trophy, User, Info, ArrowUpRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { LobbyStreamView } from "@/components/LobbyStreamView";
 import dressingroom from "@/assets/dressingroom.webp";
 import { LeaderboardSidebar } from "./LeaderBoard";
+import { LeaderboardCard } from "./LeaderboardList";
+import { motion } from "framer-motion";
 
 // Types for WebSocket data
 interface LobbyUser {
@@ -44,6 +46,7 @@ const Lobby = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
+  const constraintsRef = useRef(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null); // ADD THIS REF
 
   const [countdown, setCountdown] = useState(0);
@@ -66,6 +69,16 @@ const Lobby = () => {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+
+  const userDataStr = localStorage.getItem("user");
+  const userData = userDataStr ? JSON.parse(userDataStr) : {};
+
+  // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
+  const currentUserId = userData.id || userData.userId; 
+
+  // If you are in the host panel, you can determine it like this:
+  const isHostPanel = !!localStorage.getItem("hostJwtToken");
 
   // ADD THIS: Effect to handle timer based on lobbyStatus
   useEffect(() => {
@@ -532,6 +545,10 @@ const Lobby = () => {
 
   const statusDisplay = getStatusDisplay();
 
+  const progressPercentage = ((currentRound) / totalRounds) * 100;
+  const totalTime = 30;
+  const progress = (countdown / totalTime) * 100;
+
   return (
     <div
       className="min-h-screen p-4 md:p-8 inter"
@@ -550,237 +567,287 @@ const Lobby = () => {
         onClose={() => setIsLeaderboardOpen(false)}
         currentRoundIndex={currentRound}
       />
-      <div className="container mx-auto max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-8xl leaguegothic uppercase text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="hostpanel-header-left flex items-center justify-between relative">
+          <div className="hostpanel-title leaguegothic leading-none italic text-white text-3xl">
             TRIVIA LOBBY
-          </h1>
-          <div className="flex items-center justify-center gap-4 mt-2">
-            <Badge
-              variant={statusDisplay.badge as any}
-              className="text-sm text-white"
-            >
-              {statusDisplay.text}
-            </Badge>
-            <p className="text-muted-foreground text-lg text-white">
-              {lobbyName} -{" "}
-              <span className={isConnected ? "text-green-500" : "text-red-500"}>
-                {isConnected ? "Connected" : "Connecting..."}
-              </span>
-            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 relative">
+            {/* Info Popup */}
+            {showPopup && (
+              <div 
+                className="absolute top-12 right-0 w-64 p-6 rounded-3xl glassmorphism-medium border border-white/20 shadow-2xl z-50 animate-in fade-in zoom-in duration-200"
+              >
+                <h3 className="leaguegothic text-2xl text-white uppercase mb-4 tracking-wide">
+                  Quick Info
+                </h3>
+                <ul className="space-y-3">
+                  {[
+                    "Wait for host to start questions",
+                    "Answer quickly for more points",
+                    "Live stream shows host content",
+                    "Scores update in real-time",
+                    "Game is organized into rounds"
+                  ].map((text, i) => (
+                    <li key={i} className="flex items-start gap-3 text-white/90 text-sm font-medium">
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+                      {text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Info Button */}
+            <div className="flex items-center justify-center">
+              <button
+                onClick={() => setShowPopup(!showPopup)}
+                className="
+                  flex items-center justify-center
+                  rounded-full
+                  bg-black/40
+                  hover:bg-black/60
+                  transition-colors
+                  backdrop-blur-md
+                  shadow-[0_8px_30px_rgba(0,0,0,0.6)]
+                  ring-1 ring-white/20
+                  w-10 h-10
+                "
+              >
+                <Info className="w-5 h-5 text-white stroke-[3]" />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Main Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lobby-grid">
           {/* Left Column - Stream and Info */}
-          <div className="lg:col-span-2 space-y-6 flex flex-col gap-4">
-            {/* Stream */}
-            <LobbyStreamView
-              youtubeUrl={currentStreamUrl}
-              isMuted={isStreamMuted}
-            />
+          <div className="space-y-6 flex flex-col gap-4" ref={constraintsRef}>
+            <motion.div 
+              drag
+              // Ensures the video doesn't get dragged off-screen
+              dragConstraints={constraintsRef}
+              dragElastic={0.1}
+              dragMomentum={false}
+              className="
+                fixed right-4 z-50
+                md:relative md:top-0 md:right-0 md:w-full md:h-auto md:z-auto
+                cursor-move touch-none
+              "
+              // Disable dragging on desktop so it stays in the grid
+              onPointerDown={(e) => {
+                if (window.innerWidth >= 768) e.stopPropagation();
+              }}
+            >
+              {/* Visual indicator that it's draggable (Mobile only) */}
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-white/20 h-1 w-8 rounded-full md:hidden" />
+              
+              <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10">
+                <LobbyStreamView
+                  youtubeUrl={currentStreamUrl}
+                  isMuted={isStreamMuted}
+                />
+              </div>
+            </motion.div>
+
+            <div className="h-[220px] w-full md:hidden" aria-hidden="true" />
+            <div className="hidden md:block">
+              {/* This is empty, just maintains grid spacing on desktop */}
+            </div>
+
             {/* QUESTION OVERLAY - APPEARS WHEN ACTIVE */}
             {lobbyStatus === "active" && currentQuestion && (
-              <Card className="glassmorphism-medium border-4 shadow-xl rounded-2xl">
-                <div className="p-6">
-                  {/* Question Header */}
-                  <div className="text-center mb-6">
-                    <Badge
-                      variant="secondary"
-                      className="mb-3 bg-yellow-400 text-black text-lg px-4 py-2 rounded-full"
-                    >
+              <div className="w-full max-w-2xl mx-auto p-6 glassmorphism-medium rounded-[1rem] border border-white/10 shadow-2xl text-white font-sans">
+                {/* Header Section */}
+                <div className="flex justify-between items-start mb-6">
+                  <h2 className="leaguegothic text-4xl italic uppercase tracking-wider">
+                    Game Progress
+                  </h2>
+
+                  {/* Progress Ring */}
+                  <div
+                    className="relative w-10 h-10 rounded-full flex items-center justify-center"
+                    style={{
+                      background: `conic-gradient(
+                        rgba(255,255,255,0.9) ${progress}%,
+                        rgba(255,255,255,0.15) ${progress}% 100%
+                      )`,
+                    }}
+                  >
+                    {/* Inner circle */}
+                    <div className="inter w-8 h-8 rounded-full bg-black flex items-center justify-center text-xs text-white/80">
+                      {countdown}
+                    </div>
+                  </div>
+                </div>
+
+
+                {/* Progress Bar Section */}
+                {/* <div className="space-y-2 mb-8">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="text-white/70">Current Round:</span>
+                    <span className="font-bold">Round {currentRound} of {totalRounds}</span>
+                  </div>
+                  
+                  <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-white/40 transition-all duration-500" 
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10px] uppercase tracking-widest text-white/40 pt-1">
+                    <span>Started</span>
+                    <span>{totalRounds - currentRound} rounds remaining</span>
+                  </div>
+                </div> */}
+
+                <div className="space-y-3 mb-8">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white/70 text-sm">Current Round:</span>
+                    <span className="inter font-bold text-white text-sm">
                       {totalRounds > 0
-                        ? `Round ${currentRound + 1}`
-                        : "No Rounds"}{" "}
-                      • Question {Math.max(currentQuestionIndex, 1)} •
-                      {currentQuestion?.points || 0} Points
-                    </Badge>
-
-                    <h3 className="text-2xl font-bold text-white leading-snug break-words">
-                      {currentQuestion.text || currentQuestion.question}
-                    </h3>
-
-                    <div className="text-yellow-300 mt-2 font-medium">
-                      ⏱ Time Limit: {currentQuestion.timeLimit}s
-                    </div>
+                        ? `Round ${currentRound + 1} of ${totalRounds}`
+                        : "No Rounds Available"}
+                    </span>
                   </div>
 
-                  {/* Answer Buttons */}
-                  <div className="flex flex-col gap-4">
-                    {(
-                      currentQuestion.choices ||
-                      currentQuestion.options ||
-                      []
-                    ).map((choice: string, index: number) => (
-                      <Button
-                        key={index}
-                        variant={
-                          selectedAnswer === choice ? "default" : "outline"
-                        }
-                        className={`flex items-start justify-start text-left px-4 py-3 text-base sm:text-lg font-medium rounded-xl transition-all duration-200 glassmorphism-light text-white`}
-                        onClick={() =>
-                          !hasAnswered && handleAnswerSubmit(choice)
-                        }
-                        disabled={hasAnswered}
-                      >
-                        <span className="mr-3 font-bold text-yellow-300 flex-shrink-0">
-                          {String.fromCharCode(65 + index)}.
-                        </span>
+                  {totalRounds > 0 && (
+                    <>
+                      <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="
+                            h-full
+                            rounded-full
+                            transition-all
+                            duration-500
+                            bg-gradient-to-r
+                            from-red-600
+                            to-orange-600
+                            hover:from-red-500
+                            hover:to-orange-500
+                            border-none
+                          "
+                          style={{
+                            width: `${((currentRound + 1) / totalRounds) * 100}%`,
+                          }}
+                        />
+                      </div>
 
-                        <span className="text-white flex-1 break-all whitespace-normal leading-snug overflow-hidden text-wrap">
-                          {choice}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
-
-                  {/* Submitted Answer */}
-                  {hasAnswered && (
-                    <div className="text-center mt-6">
-                      <Badge
-                        variant="secondary"
-                        className="glassmorphism-light text-white text-lg px-4 py-3 rounded-md"
-                      >
-                        ✅ Answer Submitted: "{selectedAnswer}"
-                      </Badge>
-                    </div>
+                      <div className="inter flex justify-between text-[10px] uppercase tracking-widest text-white/40 pt-1">
+                        <span>Started</span>
+                        <span>{totalRounds - currentRound - 1} rounds remaining</span>
+                      </div>
+                    </>
                   )}
                 </div>
-              </Card>
-            )}
 
-            {/* Game Info Cards */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="glassmorphism-light px-6 py-6 flex flex-col gap-4">
-                <Clock className="w-8 h-8 text-primary mb-3 mx-auto text-white" />
-                <div className="text-center">
-                  <div className="text-3xl font-black text-primary mb-1">
-                    {lobbyStatus === "countdown" || lobbyStatus === "active"
-                      ? `${countdown}s`
-                      : "—"}
-                  </div>
-                  <div className="text-sm text-muted-foreground text-white">
-                    {lobbyStatus === "countdown"
+
+
+                {/* Question Text */}
+                <h3 className="text-xl font-medium mb-6 inter">
+                  Q: {currentQuestion.text || currentQuestion.question}
+                </h3>
+
+                {/* Answer Options */}
+                <div className="flex flex-col gap-3 mb-8 inter">
+                  {(currentQuestion.choices || []).map((choice, index) => (
+                    <button
+                      key={index}
+                      onClick={() => !hasAnswered && setSelectedAnswer(choice)}
+                      disabled={hasAnswered}
+                      className={`
+                        group flex items-center gap-4 w-full p-4 rounded-full transition-all duration-200
+                        ${selectedAnswer === choice 
+                          ? 'bg-white/20 border-white/30 ring-1 ring-white/50' 
+                          : 'bg-white/5 border border-white/10 hover:bg-white/10'}
+                      `}
+                    >
+                      <div className={`
+                        w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
+                        ${selectedAnswer === choice ? 'border-white/80 bg-white/20' : 'border-white/20'}
+                      `}>
+                        {selectedAnswer === choice && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                      </div>
+                      <span className="text-lg text-white/90 inter">{choice}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  onClick={() => handleAnswerSubmit(selectedAnswer)}
+                  disabled={hasAnswered || !selectedAnswer}
+                  className="
+                    flex items-center justify-between
+                    w-48 px-6 py-3 
+                    bg-gradient-to-r from-[#FF3B00] to-[#FF8A00] 
+                    rounded-full font-bold text-white uppercase tracking-tighter
+                    hover:opacity-90 transition-opacity disabled:opacity-50
+                    inter
+                  "
+                >
+                  <span>Submit</span>
+                  <ArrowUpRight className="w-5 h-5 stroke-[3]" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Players List */}
+          <div className="space-y-6">
+            {/* Players List */}
+            <Card className="glass-panel p-4 flex flex-col items-center justify-center text-center gap-4">
+              <div className="self-stretch inline-flex flex-col items-start rounded-3xl shadow-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-white text-lg font-medium">Main Trivia Lobby -</span>
+                  <span className="text-green-500 text-lg font-semibold">{isConnected ? "Connected" : "Disconnected"}</span>
+                </div>
+
+                {/* Badges Row */}
+                <div className="self-stretch flex items-center gap-3 flex-wrap">
+                  {/* Waiting Badge */}
+                  <div className="flex-1 shrink-0 basis-0 flex items-center gap-2 bg-white/10 hover:bg-white/15 transition-colors px-4 py-2.5 rounded-2xl border border-white/5">
+                    <div className="relative">
+                      {lobbyStatus === "countdown" || lobbyStatus === "active"
+                        ? `${countdown}s`
+                        : 
+                        <>
+                          <User size={20} className="text-gray-300" />
+                          <Clock size={10} className="absolute -bottom-0.5 -right-0.5 text-gray-300 bg-zinc-800 rounded-full" />
+                        </>
+                      }
+                    </div>
+                    <span className="text-white text-sm font-medium whitespace-nowrap">
+                      {lobbyStatus === "countdown"
                       ? "Starting Soon"
                       : lobbyStatus === "active"
                       ? "Time Remaining"
                       : "Waiting for Host"}
+                    </span>
+                  </div>
+
+                  {/* Others in Session Badge */}
+                  <div className="flex-1 shrink-0 basis-0 flex items-center gap-2 bg-white/10 hover:bg-white/15 transition-colors px-4 py-2.5 rounded-2xl border border-white/5">
+                    <Users size={20} className="text-gray-300" />
+                    <span className="text-white text-sm font-medium whitespace-nowrap">
+                      {playerCount} others in session
+                    </span>
                   </div>
                 </div>
-              </Card>
 
-              <Card className="glassmorphism-light px-6 py-6 flex flex-col gap-4">
-                <Users className="w-8 h-8 text-secondary mb-3 mx-auto text-white" />
-                <div className="text-center">
-                  <div className="text-3xl font-black text-secondary mb-1">
-                    {playerCount}
-                  </div>
-                  <div className="text-sm text-muted-foreground text-white">
-                    Players Joined
-                  </div>
-                </div>
-              </Card>
-            </div>
-            {/* Game Progress */}
-            <Card className="glass-panel p-6">
-              <h3 className="text-4xl leaguegothic uppercase text-white mb-4">
-                Game Progress
-              </h3>
-
-              {/* Round Progress */}
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between items-center">
-                  <span className="text-white">Current Round:</span>
-                  <span className="font-bold text-white">
-                    {totalRounds > 0
-                      ? `Round ${currentRound + 1} of ${totalRounds}`
-                      : "No Rounds Available"}
-                  </span>
-                </div>
-
-                {/* Only show progress bar if there are rounds */}
-                {totalRounds > 0 && (
-                  <>
-                    <div className="w-full bg-muted rounded-full h-3">
-                      <div
-                        className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${((currentRound + 1) / totalRounds) * 100}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span className="text-white">Started</span>
-                      <span className="text-white">
-                        {totalRounds - currentRound - 1} rounds remaining
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Question Progress */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-white">Questions Completed:</span>
-                  <span className="font-bold text-white">
-                    {currentQuestionIndex} /{" "}
-                    {totalQuestionsInRound > 0 ? totalQuestionsInRound : "—"}
-                  </span>
-                </div>
-
-                {/* Only show progress bar if there are questions */}
-                {totalQuestionsInRound > 0 && (
-                  <>
-                    <div className="w-full bg-muted rounded-full h-3">
-                      <div
-                        className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${
-                            (currentQuestionIndex / totalQuestionsInRound) * 100
-                          }%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span className="text-white">Started</span>
-                      <span className="text-white">
-                        {totalQuestionsInRound - currentQuestionIndex} questions
-                        remaining
-                      </span>
-                    </div>
-                  </>
-                )}
               </div>
             </Card>
-          </div>
 
-          {/* Right Column - Players List */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Players List */}
-            <Card className="glass-panel p-6 flex flex-col items-center justify-center text-center gap-4">
-              <div className="p-4 bg-yellow-500/20 rounded-full">
-                <Trophy className="w-10 h-10 text-yellow-400" />
-              </div>
-              <h3 className="text-3xl leaguegothic uppercase text-white">
-                Standings
-              </h3>
-              <p className="text-white/80 text-sm">
-                Check your rank in Round {currentRound + 1} or Overall.
-              </p>
-              <Button
-                size="lg"
-                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-                onClick={() => setIsLeaderboardOpen(true)}
-              >
-                View Leaderboard
-              </Button>
-            </Card>
+            <LeaderboardCard 
+              currentRoundIndex={0} 
+              currentUserId={currentUserId} 
+            />
 
             {/* Quick Info */}
-            <Card className="glass-panel p-6">
+            {/* <Card className="glass-panel p-6">
               <h3 className="text-4xl leaguegothic uppercase text-white mb-4">
                 ℹ️ Quick Info
               </h3>
@@ -791,7 +858,7 @@ const Lobby = () => {
                 <p className="text-white">• Scores update in real-time</p>
                 <p className="text-white">• Game is organized into rounds</p>
               </div>
-            </Card>
+            </Card> */}
           </div>
         </div>
 
@@ -807,6 +874,44 @@ const Lobby = () => {
           </Button>
         </div>
       </div>
+      {lobbyStatus === "countdown" && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+          {/* Background Glow matching your gradient */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#ff1a00] rounded-full blur-[150px] opacity-20" />
+
+          <div className="relative flex flex-col items-center">
+            {/* Sub-header */}
+            <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-2">
+              Question Starting In
+            </span>
+
+            {/* Large Animated Countdown */}
+            <div className="relative flex items-center justify-center">
+              <span 
+                key={countdown} // This key ensures the animation re-runs every second
+                className="text-[14rem] font-black leading-none bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent animate-in zoom-in duration-300"
+              >
+                {countdown}
+              </span>
+              <span className="absolute -right-12 bottom-10 text-4xl font-black text-[#ff7a00] italic">
+                S
+              </span>
+            </div>
+
+            {/* Progress Indicator */}
+            <div className="mt-4 flex gap-2">
+              {[...Array(3)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`h-1.5 w-12 rounded-full transition-all duration-500 ${
+                    countdown > i ? "bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" : "bg-white/10"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -13,7 +13,7 @@ export const LobbyStreamView = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [currentMuted, setCurrentMuted] = useState<boolean>(isMuted);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false); 
 
   // Load YouTube API
   const loadYouTubeAPI = (): Promise<void> => {
@@ -255,14 +255,21 @@ export const LobbyStreamView = ({
   return (
     <Card className="glass-panel overflow-hidden border-2 border-red-500 ">
       <div className="p-4 border-b border-border text-white">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2">
-            <Tv className="w-5 h-5" />
-            <h2 className="text-4xl leaguegothic uppercase text-white">🔴 LIVE STREAM</h2>
+            <img src="logo2.png" alt="" style={{width:"2.25rem", height:"2.25rem"}}/>
+            <h2 className="text-2xl leaguegothic"></h2>
           </div>
-          <Badge variant="secondary" className="bg-white text-red-600">
-            {currentMuted ? "🔇 MUTED" : "🔊 LIVE"}
-          </Badge>
+
+          <div className="flex items-center">
+            <div className="flex items-center gap-2 rounded-2xl  px-3 py-2 border border-white/10">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-white">LIVE</span>
+            </div>
+          </div>
         </div>
       </div>
 
