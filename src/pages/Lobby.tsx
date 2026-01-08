@@ -449,48 +449,38 @@ const Lobby = () => {
 
         setLobbyStatus("waiting");
         setCountdown(0);
-
-        // Get the data from the event
-        const leaderboardData = data.leaderboard || [];
-        const gameSessionId = data.gameSessionId;
-
-        console.log("Game ended with:", leaderboardData.length, "players");
-
-        // 2. CLEAR AUTH LOCAL STORAGE
-        // This is crucial: removes the token so they can't auto-reconnect if they refresh
-        localStorage.removeItem("jwtToken");
-        localStorage.removeItem("user");
-        localStorage.removeItem("hostJwtToken");
-
-        // 3. Store Leaderboard Data in LocalStorage
-        // We keep this so the /leaderboard page has data to show
-        localStorage.setItem("lastGameSessionId", gameSessionId);
-        localStorage.setItem(
-          "lastLeaderboard",
-          JSON.stringify(leaderboardData),
-        );
-
         toast({
-          title: "🏆 Game Over!",
-          description: "Redirecting to leaderboard...",
-          duration: 2000,
+          title: "Game Over!",
+          description: `Winner: ${data.winner.name} with ${data.winner.score} points`,
         });
+        break;
 
-        // 4. Disconnect Socket explicitly
-        if (socketRef.current) {
-          socketRef.current.disconnect();
+      case "stream-control":
+        if (data.action === "mute") {
+          setIsStreamMuted(data.value);
+        } else if (data.action === "change_url") {
+          setCurrentStreamUrl(data.value);
+        }
+        break;
+
+      case "lobby-reset":
+        // Clear timer
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
         }
 
-        // 5. Navigate
-        setTimeout(() => {
-          navigate("/leaderboard", {
-            state: {
-              leaderboard: leaderboardData,
-              gameSessionId: gameSessionId,
-            },
-          });
-        }, 1500);
+        setLobbyStatus("waiting");
+        setCountdown(0);
+        setCurrentQuestionIndex(0);
+        setCurrentRound(0);
+        setLobbyUsers([]);
+        toast({
+          title: "Lobby Reset",
+          description: "Lobby has been reset",
+        });
         break;
+
       default:
         console.log("Unhandled lobby update type:", type);
     }
@@ -543,9 +533,6 @@ const Lobby = () => {
     }
   };
 
-  const statusDisplay = getStatusDisplay();
-
-  const progressPercentage = ((currentRound) / totalRounds) * 100;
   const totalTime = 30;
   const progress = (countdown / totalTime) * 100;
 

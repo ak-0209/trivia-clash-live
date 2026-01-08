@@ -998,6 +998,43 @@ const Host = () => {
               isHost={true}
             />
 
+            <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
+              {/* Header remains consistent with your brand */}
+              <div className="px-6 py-4 border-b border-white/30 bg-white/5">
+                <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
+                  Stream Controls
+                </h2>
+              </div>
+
+              <div className="px-6 py-4">
+              <h3 className="text-lg font-semibold mb-3">
+                Stream Source
+              </h3>
+              <div className="space-y-3">
+                <Input
+                  type="text"
+                  value={currentStreamUrl}
+                  onChange={(e) => setCurrentStreamUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
+                  className="font-mono text-sm"
+                />
+                <button onClick={() => handleStreamUrlChange(currentStreamUrl)} className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg">
+                  {/* The Gradient Border Layer */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                  
+                  {/* The Inner Content Area */}
+                  <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
+                    <span className="text-white text-xs font-bold tracking-widest uppercase">
+                      Update
+                    </span>
+                    
+                    <ArrowUpRight size={14} className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </div>
+                </button>
+              </div>
+              </div>
+            </Card>
+
             {/* <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
               <div className="px-6 py-4 border-b border-white/30 bg-white/5">
                 <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
@@ -1072,6 +1109,78 @@ const Host = () => {
                     ? "Caution: This is the final question in the round" 
                     : "Select a launch method to proceed"}
                 </p>
+              </div>
+            </Card> */}
+
+            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h2 className="section-title">
+                📝{" "}
+                {currentQuestionData
+                  ? `Question ${currentQuestion}`
+                  : "No Question Active"}
+              </h2>
+              {currentQuestionData ? (
+                <div className="question-box">
+                  <p className="question-text">
+                    {currentQuestionData.text || currentQuestionData.question}
+                  </p>
+                  <div className="choice-grid">
+                    {(
+                      currentQuestionData.choices ||
+                      currentQuestionData.options ||
+                      []
+                    ).map((choice, i) => (
+                      <div key={i} className="choice-item">
+                        {String.fromCharCode(65 + i)}. {choice}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="question-meta">
+                    <span>Time: {currentQuestionData.timeLimit}s</span>
+                    <span>Points: {currentQuestionData.points}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-question">
+                  <Clock className="empty-icon" />
+                  <p>No question active. Start one to begin.</p>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* RIGHT COLUMN */}
+          <div className="right-column">
+            {/* <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
+              <h3 className="section-title text-4xl leaguegothic uppercase">
+                Player Stats
+              </h3>
+              <div className="stat-block">
+                <div className="stat">
+                  <span>Total Players</span>
+                  <strong>{playerCount}</strong>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: "100%" }} />
+                </div>
+              </div>
+              <div className="stat-block">
+                <div className="stat">
+                  <span>Answered</span>
+                  <strong>{answeredCount}</strong>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill secondary"
+                    style={{
+                      width: `${
+                        playerCount > 0
+                          ? (answeredCount / playerCount) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
             </Card> */}
 
@@ -1183,115 +1292,6 @@ const Host = () => {
                     End Game
                   </Button>
                 )}
-              </div>
-            </Card>
-
-            <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h2 className="section-title">
-                📝{" "}
-                {currentQuestionData
-                  ? `Question ${currentQuestion}`
-                  : "No Question Active"}
-              </h2>
-              {currentQuestionData ? (
-                <div className="question-box">
-                  <p className="question-text">
-                    {currentQuestionData.text || currentQuestionData.question}
-                  </p>
-                  <div className="choice-grid">
-                    {(
-                      currentQuestionData.choices ||
-                      currentQuestionData.options ||
-                      []
-                    ).map((choice, i) => (
-                      <div key={i} className="choice-item">
-                        {String.fromCharCode(65 + i)}. {choice}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="question-meta">
-                    <span>Time: {currentQuestionData.timeLimit}s</span>
-                    <span>Points: {currentQuestionData.points}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-question">
-                  <Clock className="empty-icon" />
-                  <p>No question active. Start one to begin.</p>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* RIGHT COLUMN */}
-          <div className="right-column">
-            {/* <Card className="glassmorphism-medium px-6 py-6 flex flex-col gap-4">
-              <h3 className="section-title text-4xl leaguegothic uppercase">
-                Player Stats
-              </h3>
-              <div className="stat-block">
-                <div className="stat">
-                  <span>Total Players</span>
-                  <strong>{playerCount}</strong>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: "100%" }} />
-                </div>
-              </div>
-              <div className="stat-block">
-                <div className="stat">
-                  <span>Answered</span>
-                  <strong>{answeredCount}</strong>
-                </div>
-                <div className="progress-bar">
-                  <div
-                    className="progress-fill secondary"
-                    style={{
-                      width: `${
-                        playerCount > 0
-                          ? (answeredCount / playerCount) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </Card> */}
-
-            <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
-              {/* Header remains consistent with your brand */}
-              <div className="px-6 py-4 border-b border-white/30 bg-white/5">
-                <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
-                  Stream Controls
-                </h2>
-              </div>
-
-              <div className="px-6 py-4">
-              <h3 className="text-lg font-semibold mb-3">
-                Stream Source
-              </h3>
-              <div className="space-y-3">
-                <Input
-                  type="text"
-                  value={currentStreamUrl}
-                  onChange={(e) => setCurrentStreamUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
-                  className="font-mono text-sm"
-                />
-                <button onClick={() => handleStreamUrlChange(currentStreamUrl)} className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg">
-                  {/* The Gradient Border Layer */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-                  
-                  {/* The Inner Content Area */}
-                  <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
-                    <span className="text-white text-xs font-bold tracking-widest uppercase">
-                      Update
-                    </span>
-                    
-                    <ArrowUpRight size={14} className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </div>
-                </button>
-              </div>
               </div>
             </Card>
 
@@ -1547,37 +1547,6 @@ const Host = () => {
             </div>
           </DialogContent>
         </Dialog>
-        {gameStatus === "countdown" && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
-            {/* Decorative Glow Background */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#ff1a00] rounded-full blur-[120px] opacity-20" />
-
-            <div className="relative flex flex-col items-center">
-              {/* Label */}
-              <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-4 animate-pulse">
-                Prepare for Question
-              </span>
-
-              {/* Large Countdown Number */}
-              <div className="relative flex items-center justify-center">
-                <span className="text-[12rem] font-black leading-none bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent drop-shadow-2xl">
-                  {countdown}
-                </span>
-                <span className="absolute -right-8 bottom-8 text-2xl font-black text-[#ff7a00]">
-                  S
-                </span>
-              </div>
-
-              {/* Progress Bar (Visual indicator of time) */}
-              <div className="mt-8 w-64 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-[#ff1a00] to-[#ff7a00] transition-all duration-1000 ease-linear"
-                  style={{ width: `${(countdown / countdownSeconds) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
