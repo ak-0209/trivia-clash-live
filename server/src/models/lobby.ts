@@ -38,12 +38,17 @@ export interface ILobby extends Document {
     hasAnsweredCurrentQuestion?: boolean;
     lastAnswerTime?: Date;
     lastAnswerCorrect?: boolean;
+    lastAnswer?: string;
   }>;
   roundProgress: Array<{
     roundId: string;
     nextQuestionIndex: number;
     isCompleted: boolean;
   }>;
+  questionAnalytics?: {
+    totalAnswered: number;
+    choiceDistribution: Record<string, number>;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,6 +104,7 @@ const LobbySchema = new Schema(
         hasAnsweredCurrentQuestion: { type: Boolean, default: false },
         lastAnswerTime: { type: Date },
         lastAnswerCorrect: { type: Boolean },
+        lastAnswer: { type: String },
       },
     ],
 

@@ -3,7 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, Tv, Trophy, User, Info, ArrowUpRight } from "lucide-react";
+import {
+  Users,
+  Clock,
+  Tv,
+  Trophy,
+  User,
+  Info,
+  ArrowUpRight,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { LobbyStreamView } from "@/components/LobbyStreamView";
@@ -70,12 +78,13 @@ const Lobby = () => {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>([]);
 
   const userDataStr = localStorage.getItem("user");
   const userData = userDataStr ? JSON.parse(userDataStr) : {};
 
   // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
-  const currentUserId = userData.id || userData.userId; 
+  const currentUserId = userData.id || userData.userId;
 
   // If you are in the host panel, you can determine it like this:
   const isHostPanel = !!localStorage.getItem("hostJwtToken");
@@ -88,11 +97,9 @@ const Lobby = () => {
       timerIntervalRef.current = null;
     }
 
-    // Only start timer if we're in countdown or active state
-    if (
-      (lobbyStatus === "active" || lobbyStatus === "countdown") &&
-      countdown > 0
-    ) {
+    // FIX: Only start local timer for 'active' state.
+    // The 'countdown' state relies on server socket events (case "countdown").
+    if (lobbyStatus === "active" && countdown > 0) {
       console.log(
         `Starting timer for ${lobbyStatus} with ${countdown} seconds`,
       );
@@ -105,12 +112,6 @@ const Lobby = () => {
               clearInterval(timerIntervalRef.current);
               timerIntervalRef.current = null;
             }
-
-            // If countdown finished, update status
-            if (lobbyStatus === "countdown") {
-              setLobbyStatus("active");
-            }
-
             return 0;
           }
           return prev - 1;
@@ -125,7 +126,7 @@ const Lobby = () => {
         timerIntervalRef.current = null;
       }
     };
-  }, [lobbyStatus]); // Re-run when lobbyStatus changes
+  }, [lobbyStatus]);
 
   useEffect(() => {
     // Get user data from localStorage
@@ -280,6 +281,30 @@ const Lobby = () => {
       handleLobbyUpdate(data.type, data.data);
     });
 
+    socket.on("force_disconnect", (data: { message: string }) => {
+      console.log("Force disconnected:", data.message);
+
+      // 1. Permanently disconnect socket so it doesn't auto-reconnect
+      socket.disconnect();
+
+      // 2. Clear token so they have to login again (optional, but safer)
+      localStorage.removeItem("jwtToken");
+      localStorage.removeItem("user");
+
+      // 3. Show error toast
+      toast({
+        title: "Disconnected",
+        description:
+          data.message ||
+          "You have been logged out because you opened the game in another tab.",
+        variant: "destructive",
+        duration: 10000, // Show for 10 seconds
+      });
+
+      // 4. Redirect to login/home
+      navigate("/auth");
+    });
+
     // Cleanup on unmount
     return () => {
       // Clear timer interval
@@ -416,6 +441,9 @@ const Lobby = () => {
         setCurrentQuestion(null);
         setHasAnswered(false);
         setCountdown(0);
+        if (data.leaderboard) {
+          setLiveLeaderboard(data.leaderboard);
+        }
         toast({
           title: "Question Ended!",
           description: `Correct answer: ${data.correctAnswer}`,
@@ -442,6 +470,7 @@ const Lobby = () => {
         break;
 
       case "game-ended":
+        // Clear timer
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
           timerIntervalRef.current = null;
@@ -449,9 +478,22 @@ const Lobby = () => {
 
         setLobbyStatus("waiting");
         setCountdown(0);
+
+        // =================================================================
+        // FIX: Navigate to the leaderboard page
+        // =================================================================
+        // Assuming your route is /leaderboard.
+        // You can pass data via state if your leaderboard needs it.
+        navigate("/leaderboard", {
+          state: {
+            finalResults: data.leaderboard,
+            gameSessionId: data.gameSessionId,
+          },
+        });
+
         toast({
           title: "Game Over!",
-          description: `Winner: ${data.winner.name} with ${data.winner.score} points`,
+          description: "Redirecting to results...",
         });
         break;
 
@@ -563,9 +605,7 @@ const Lobby = () => {
           <div className="flex flex-col gap-3 relative">
             {/* Info Popup */}
             {showPopup && (
-              <div 
-                className="absolute top-12 right-0 w-64 p-6 rounded-3xl glassmorphism-medium border border-white/20 shadow-2xl z-50 animate-in fade-in zoom-in duration-200"
-              >
+              <div className="absolute top-12 right-0 w-64 p-6 rounded-3xl glassmorphism-medium border border-white/20 shadow-2xl z-50 animate-in fade-in zoom-in duration-200">
                 <h3 className="leaguegothic text-2xl text-white uppercase mb-4 tracking-wide">
                   Quick Info
                 </h3>
@@ -575,9 +615,12 @@ const Lobby = () => {
                     "Answer quickly for more points",
                     "Live stream shows host content",
                     "Scores update in real-time",
-                    "Game is organized into rounds"
+                    "Game is organized into rounds",
                   ].map((text, i) => (
-                    <li key={i} className="flex items-start gap-3 text-white/90 text-sm font-medium">
+                    <li
+                      key={i}
+                      className="flex items-start gap-3 text-white/90 text-sm font-medium"
+                    >
                       <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white shrink-0" />
                       {text}
                     </li>
@@ -612,7 +655,7 @@ const Lobby = () => {
         <div className="lobby-grid">
           {/* Left Column - Stream and Info */}
           <div className="space-y-6 flex flex-col gap-4" ref={constraintsRef}>
-            <motion.div 
+            <motion.div
               drag
               // Ensures the video doesn't get dragged off-screen
               dragConstraints={constraintsRef}
@@ -630,7 +673,7 @@ const Lobby = () => {
             >
               {/* Visual indicator that it's draggable (Mobile only) */}
               <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-white/20 h-1 w-8 rounded-full md:hidden" />
-              
+
               <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10">
                 <LobbyStreamView
                   youtubeUrl={currentStreamUrl}
@@ -670,7 +713,6 @@ const Lobby = () => {
                   </div>
                 </div>
 
-
                 {/* Progress Bar Section */}
                 {/* <div className="space-y-2 mb-8">
                   <div className="flex justify-between text-sm font-medium">
@@ -693,7 +735,9 @@ const Lobby = () => {
 
                 <div className="space-y-3 mb-8">
                   <div className="flex justify-between items-center">
-                    <span className="text-white/70 text-sm">Current Round:</span>
+                    <span className="text-white/70 text-sm">
+                      Current Round:
+                    </span>
                     <span className="inter font-bold text-white text-sm">
                       {totalRounds > 0
                         ? `Round ${currentRound + 1} of ${totalRounds}`
@@ -718,20 +762,22 @@ const Lobby = () => {
                             border-none
                           "
                           style={{
-                            width: `${((currentRound + 1) / totalRounds) * 100}%`,
+                            width: `${
+                              ((currentRound + 1) / totalRounds) * 100
+                            }%`,
                           }}
                         />
                       </div>
 
                       <div className="inter flex justify-between text-[10px] uppercase tracking-widest text-white/40 pt-1">
                         <span>Started</span>
-                        <span>{totalRounds - currentRound - 1} rounds remaining</span>
+                        <span>
+                          {totalRounds - currentRound - 1} rounds remaining
+                        </span>
                       </div>
                     </>
                   )}
                 </div>
-
-
 
                 {/* Question Text */}
                 <h3 className="text-xl font-medium mb-6 inter">
@@ -747,18 +793,30 @@ const Lobby = () => {
                       disabled={hasAnswered}
                       className={`
                         group flex items-center gap-4 w-full p-4 rounded-full transition-all duration-200
-                        ${selectedAnswer === choice 
-                          ? 'bg-white/20 border-white/30 ring-1 ring-white/50' 
-                          : 'bg-white/5 border border-white/10 hover:bg-white/10'}
+                        ${
+                          selectedAnswer === choice
+                            ? "bg-white/20 border-white/30 ring-1 ring-white/50"
+                            : "bg-white/5 border border-white/10 hover:bg-white/10"
+                        }
                       `}
                     >
-                      <div className={`
+                      <div
+                        className={`
                         w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
-                        ${selectedAnswer === choice ? 'border-white/80 bg-white/20' : 'border-white/20'}
-                      `}>
-                        {selectedAnswer === choice && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                        ${
+                          selectedAnswer === choice
+                            ? "border-white/80 bg-white/20"
+                            : "border-white/20"
+                        }
+                      `}
+                      >
+                        {selectedAnswer === choice && (
+                          <div className="w-2.5 h-2.5 bg-white rounded-full" />
+                        )}
                       </div>
-                      <span className="text-lg text-white/90 inter">{choice}</span>
+                      <span className="text-lg text-white/90 inter">
+                        {choice}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -789,8 +847,12 @@ const Lobby = () => {
             <Card className="glass-panel p-4 flex flex-col items-center justify-center text-center gap-4">
               <div className="self-stretch inline-flex flex-col items-start rounded-3xl shadow-2xl">
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-white text-lg font-medium">Main Trivia Lobby -</span>
-                  <span className="text-green-500 text-lg font-semibold">{isConnected ? "Connected" : "Disconnected"}</span>
+                  <span className="text-white text-lg font-medium">
+                    Main Trivia Lobby -
+                  </span>
+                  <span className="text-green-500 text-lg font-semibold">
+                    {isConnected ? "Connected" : "Disconnected"}
+                  </span>
                 </div>
 
                 {/* Badges Row */}
@@ -798,21 +860,25 @@ const Lobby = () => {
                   {/* Waiting Badge */}
                   <div className="flex-1 shrink-0 basis-0 flex items-center gap-2 bg-white/10 hover:bg-white/15 transition-colors px-4 py-2.5 rounded-2xl border border-white/5">
                     <div className="relative">
-                      {lobbyStatus === "countdown" || lobbyStatus === "active"
-                        ? `${countdown}s`
-                        : 
+                      {lobbyStatus === "countdown" ||
+                      lobbyStatus === "active" ? (
+                        `${countdown}s`
+                      ) : (
                         <>
                           <User size={20} className="text-gray-300" />
-                          <Clock size={10} className="absolute -bottom-0.5 -right-0.5 text-gray-300 bg-zinc-800 rounded-full" />
+                          <Clock
+                            size={10}
+                            className="absolute -bottom-0.5 -right-0.5 text-gray-300 bg-zinc-800 rounded-full"
+                          />
                         </>
-                      }
+                      )}
                     </div>
                     <span className="text-white text-sm font-medium whitespace-nowrap">
                       {lobbyStatus === "countdown"
-                      ? "Starting Soon"
-                      : lobbyStatus === "active"
-                      ? "Time Remaining"
-                      : "Waiting for Host"}
+                        ? "Starting Soon"
+                        : lobbyStatus === "active"
+                        ? "Time Remaining"
+                        : "Waiting for Host"}
                     </span>
                   </div>
 
@@ -824,13 +890,13 @@ const Lobby = () => {
                     </span>
                   </div>
                 </div>
-
               </div>
             </Card>
 
-            <LeaderboardCard 
-              currentRoundIndex={0} 
-              currentUserId={currentUserId} 
+            <LeaderboardCard
+              currentRoundIndex={0}
+              currentUserId={currentUserId}
+              liveLeaderboard={liveLeaderboard}
             />
 
             {/* Quick Info */}
@@ -874,7 +940,7 @@ const Lobby = () => {
 
             {/* Large Animated Countdown */}
             <div className="relative flex items-center justify-center">
-              <span 
+              <span
                 key={countdown} // This key ensures the animation re-runs every second
                 className="text-[14rem] font-black leading-none bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent animate-in zoom-in duration-300"
               >
@@ -888,10 +954,12 @@ const Lobby = () => {
             {/* Progress Indicator */}
             <div className="mt-4 flex gap-2">
               {[...Array(3)].map((_, i) => (
-                <div 
-                  key={i} 
+                <div
+                  key={i}
                   className={`h-1.5 w-12 rounded-full transition-all duration-500 ${
-                    countdown > i ? "bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" : "bg-white/10"
+                    countdown > i
+                      ? "bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]"
+                      : "bg-white/10"
                   }`}
                 />
               ))}

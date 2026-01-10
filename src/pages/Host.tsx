@@ -31,6 +31,7 @@ import { Volume2, VolumeX, RefreshCw, Radio } from "lucide-react";
 import dressingroom from "@/assets/dressingroom.webp";
 import { LeaderboardSidebar } from "./LeaderBoard";
 import { LeaderboardCard } from "./LeaderboardList";
+import { QuestionAnalyticsSummary } from "../components/QuestionAnalyticsSummary";
 // Types for rounds
 interface Round {
   id: string;
@@ -79,12 +80,17 @@ const Host = () => {
       "https://www.youtube.com/embed/YDvsBbKfLPA",
   );
   const [roundsLoaded, setRoundsLoaded] = useState(false);
+  const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>([]);
 
   const userDataStr = localStorage.getItem("user");
   const userData = userDataStr ? JSON.parse(userDataStr) : {};
+  const [lastQuestionAnalytics, setLastQuestionAnalytics] = useState<{
+    totalAnswered: number;
+    choiceDistribution: Record<string, number>;
+  } | null>(null);
 
   // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
-  const currentUserId = userData.id || userData.userId; 
+  const currentUserId = userData.id || userData.userId;
 
   // If you are in the host panel, you can determine it like this:
   const isHostPanel = !!localStorage.getItem("hostJwtToken");
@@ -454,21 +460,20 @@ const Host = () => {
         break;
 
       case "question-started":
+        // CRITICAL: Clear previous analytics IMMEDIATELY when new question starts
+        console.log("🔄 New question started. Clearing previous analytics.");
+        setLastQuestionAnalytics(null);
+
         setCurrentQuestionData(data.question);
         setGameStatus("active");
         setCurrentQuestion(data.questionIndex);
-        setAnsweredCount(0); // Reset answered count
+        setAnsweredCount(0);
 
-        // Add this countdown setting
         if (data.startTime) {
           const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
           const remaining = Math.max(0, (data.timeLimit || 30) - elapsed);
           setCountdown(remaining);
-          console.log(
-            `⏰ Question started with ${remaining}s remaining (server time sync)`,
-          );
         } else {
-          // Fallback to full time limit
           setCountdown(data.timeLimit || 30);
         }
 
@@ -479,24 +484,38 @@ const Host = () => {
         break;
 
       case "question-ended":
-        setGameStatus("waiting"); // Status goes back to waiting
+        setGameStatus("waiting");
         setCountdown(0);
 
-        // Show toast with results
         toast({
           title: "Question Ended!",
           description: `Correct answer: ${data.correctAnswer}`,
         });
 
-        // NEW: Check if the server says the round is over
+        // Check if analytics data was sent from server
+        if (data.questionAnalytics) {
+          console.log("📊 Received analytics:", data.questionAnalytics);
+          setLastQuestionAnalytics(data.questionAnalytics);
+        } else {
+          console.warn(
+            "⚠️ No analytics data in question-ended event. Clearing UI.",
+          );
+          // If server sends no analytics (e.g. replay), explicitly clear it
+          setLastQuestionAnalytics(null);
+        }
+
         if (data.isRoundOver) {
           toast({
             title: "🏆 ROUND COMPLETE",
             description:
               "That was the last question! Please click 'Next Round'.",
-            duration: 10000, // Show for 10 seconds
-            className: "bg-green-600 text-white", // Make it stand out
+            duration: 10000,
+            className: "bg-green-600 text-white",
           });
+        }
+
+        if (data.leaderboard) {
+          setLiveLeaderboard(data.leaderboard);
         }
         break;
 
@@ -521,6 +540,7 @@ const Host = () => {
         setGameStarted(false);
         setCurrentQuestionData(null);
         setCountdown(0);
+        setLastQuestionAnalytics(null); // Clear analytics on game end
         toast({
           title: "Game Completed!",
           description: "The game has ended. Final results are available.",
@@ -534,6 +554,7 @@ const Host = () => {
         setCurrentQuestionData(null);
         setPlayerCount(0);
         setCountdown(0);
+        setLastQuestionAnalytics(null); // Clear analytics on reset
         toast({
           title: "Lobby Reset",
           description: "Lobby has been reset and is ready for a new game",
@@ -550,15 +571,20 @@ const Host = () => {
 
       case "round-changed":
         setCurrentRound(data.roundIndex);
-
         setCurrentQuestion(data.currentQuestionIndex || 0);
-
         setTotalQuestionsInRound(data.totalQuestionsInRound);
         setCurrentQuestionData(null);
         setGameStatus("waiting");
         setCountdown(0);
+        setLastQuestionAnalytics(null); // Clear analytics on round change
 
-        // Fetch questions for the new round
+        setRounds((prevRounds) =>
+          prevRounds.map((r) => ({
+            ...r,
+            isActive: r.id === data.roundId,
+          })),
+        );
+
         fetchQuestionsInRound(data.roundId);
 
         toast({
@@ -924,7 +950,9 @@ const Host = () => {
       />
       <div className="hostpanel-wrapper">
         <div className="hostpanel-header-left flex items-center justify-between">
-          <div className="hostpanel-title leaguegothic leading-none italic">HOST PANEL</div>
+          <div className="hostpanel-title leaguegothic leading-none italic">
+            HOST PANEL
+          </div>
           <div className="flex flex-col gap-3">
             {/* In your header section, update the round display */}
             {/* <div className="status-row">
@@ -984,7 +1012,6 @@ const Host = () => {
                 {isConnected ? "Connected" : "Disconnected"}
               </span>
             </div>
-
           </div>
         </div>
 
@@ -1007,31 +1034,35 @@ const Host = () => {
               </div>
 
               <div className="px-6 py-4">
-              <h3 className="text-lg font-semibold mb-3">
-                Stream Source
-              </h3>
-              <div className="space-y-3">
-                <Input
-                  type="text"
-                  value={currentStreamUrl}
-                  onChange={(e) => setCurrentStreamUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
-                  className="font-mono text-sm"
-                />
-                <button onClick={() => handleStreamUrlChange(currentStreamUrl)} className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg">
-                  {/* The Gradient Border Layer */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-                  
-                  {/* The Inner Content Area */}
-                  <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
-                    <span className="text-white text-xs font-bold tracking-widest uppercase">
-                      Update
-                    </span>
-                    
-                    <ArrowUpRight size={14} className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </div>
-                </button>
-              </div>
+                <h3 className="text-lg font-semibold mb-3">Stream Source</h3>
+                <div className="space-y-3">
+                  <Input
+                    type="text"
+                    value={currentStreamUrl}
+                    onChange={(e) => setCurrentStreamUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
+                    className="font-mono text-sm"
+                  />
+                  <button
+                    onClick={() => handleStreamUrlChange(currentStreamUrl)}
+                    className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg"
+                  >
+                    {/* The Gradient Border Layer */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+
+                    {/* The Inner Content Area */}
+                    <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
+                      <span className="text-white text-xs font-bold tracking-widest uppercase">
+                        Update
+                      </span>
+
+                      <ArrowUpRight
+                        size={14}
+                        className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                      />
+                    </div>
+                  </button>
+                </div>
               </div>
             </Card>
 
@@ -1193,11 +1224,19 @@ const Host = () => {
                 {/* Current Round Info Section */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-end">
-                    <h3 className="text-lg font-semibold uppercase opacity-80">Current Round</h3>
+                    <h3 className="text-lg font-semibold uppercase opacity-80">
+                      Current Round
+                    </h3>
                     <div className="text-right">
-                      <span className="text-sm font-medium uppercase opacity-60">Status: </span>
+                      <span className="text-sm font-medium uppercase opacity-60">
+                        Status:{" "}
+                      </span>
                       <span className="text-green-500 font-bold">
-                        {currentRound >= 0 ? `Round ${currentRound + 1} • Question ${currentQuestion}` : "Lobby"}
+                        {currentRound >= 0
+                          ? `Round ${
+                              currentRound + 1
+                            } • Question ${currentQuestion}`
+                          : "Lobby"}
                       </span>
                     </div>
                   </div>
@@ -1208,11 +1247,13 @@ const Host = () => {
                         <div className="text-xl font-bold">
                           Round {currentRound + 1} of {totalRounds}
                         </div>
-                        <div className="text-lg opacity-90">{currentRoundName}</div>
+                        <div className="text-lg opacity-90">
+                          {currentRoundName}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {totalQuestionsInRound} questions in this round
                         </div>
-                        
+
                         <Button
                           onClick={handleOpenRoundSelector}
                           variant="ghost" // Changed to ghost to remove default border styles
@@ -1234,7 +1275,9 @@ const Host = () => {
                     ) : (
                       <div className="py-4 text-center opacity-60">
                         <p className="text-xl font-bold">Game Not Started</p>
-                        <p className="text-sm">Click "Start Game" below to begin</p>
+                        <p className="text-sm">
+                          Click "Start Game" below to begin
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1243,20 +1286,20 @@ const Host = () => {
                 {/* Action Buttons Section */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                  <Button
-                    onClick={handleOpenStartModal}
-                    disabled={!canStartQuestion}
-                    variant="ghost"
-                    className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-                    <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
-                      <Play className="w-4 h-4 mr-2 text-white" />
-                      <span className="text-xs font-bold text-white tracking-widest uppercase">
-                        {currentRound < 0 ? "START GAME" : "NEXT QUESTION"}
-                      </span>
-                    </div>
-                  </Button>
+                    <Button
+                      onClick={handleOpenStartModal}
+                      disabled={!canStartQuestion}
+                      variant="ghost"
+                      className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                      <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                        <Play className="w-4 h-4 mr-2 text-white" />
+                        <span className="text-xs font-bold text-white tracking-widest uppercase">
+                          {currentRound < 0 ? "START GAME" : "NEXT QUESTION"}
+                        </span>
+                      </div>
+                    </Button>
                     <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
                       Start the next question with countdown or immediately
                     </p>
@@ -1265,7 +1308,9 @@ const Host = () => {
                   <div className="space-y-2">
                     <Button
                       onClick={handleNextRound}
-                      disabled={currentRound >= totalRounds - 1 || currentRound < 0}
+                      disabled={
+                        currentRound >= totalRounds - 1 || currentRound < 0
+                      }
                       variant="ghost"
                       className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
                     >
@@ -1345,9 +1390,11 @@ const Host = () => {
               currentRoundIndex={currentRound} 
               rounds={rounds} 
             /> */}
-            <LeaderboardCard 
-              currentRoundIndex={0} 
-              isHost={true} 
+            <QuestionAnalyticsSummary analytics={lastQuestionAnalytics} />
+            <LeaderboardCard
+              currentRoundIndex={0}
+              isHost={true}
+              liveLeaderboard={liveLeaderboard}
             />
           </div>
         </div>
@@ -1380,7 +1427,9 @@ const Host = () => {
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
                       <Play className="h-3 w-3 fill-white text-white" />
                     </div>
-                    {currentQuestion === 0 && !gameStarted ? "Start Game" : "Next Question"}
+                    {currentQuestion === 0 && !gameStarted
+                      ? "Start Game"
+                      : "Next Question"}
                   </button>
                 </div>
               </div>
@@ -1404,7 +1453,9 @@ const Host = () => {
                       min="1"
                       max="60"
                       value={countdownSeconds}
-                      onChange={(e) => setCountdownSeconds(Number(e.target.value))}
+                      onChange={(e) =>
+                        setCountdownSeconds(Number(e.target.value))
+                      }
                       className="bg-transparent text-center text-3xl leaguegothic text-white focus:outline-none"
                     />
                     <span className=" inter absolute right-6 text-[10px] font-black uppercase tracking-tighter text-slate-600">
@@ -1429,7 +1480,9 @@ const Host = () => {
         <Dialog open={showRoundSelector} onOpenChange={setShowRoundSelector}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-xl text-white">Select Round</DialogTitle>
+              <DialogTitle className="text-xl text-white">
+                Select Round
+              </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">

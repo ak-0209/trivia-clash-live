@@ -1026,84 +1026,99 @@ class TriviaSocket {
         return;
       }
 
-      if (lobby.players.length >= lobby.maxPlayers) {
-        socket.emit("error", { message: "Lobby is full" });
-        return;
-      }
+      // 1. Normalize ID to String (Critical for matching)
+      const currentUserId = String(socket.user!._id);
 
-      // Check if user already in lobby
-      const existingPlayer = lobby.players.find(
-        (p) => p.userId === socket.user!._id,
+      // 2. Find ANY existing entries for this user (handles duplicates)
+      const existingEntries = lobby.players.filter(
+        (p) => String(p.userId) === currentUserId,
       );
 
-      if (existingPlayer) {
-        // FIX: Update socket ID if reconnecting - PRESERVE ALL DATA INCLUDING SCORE
-        const updatedPlayers = lobby.players.map((p) =>
-          p.userId === socket.user!._id
-            ? {
-                ...p, // Keep ALL existing data including score
-                socketId: socket.id, // Only update socketId
-              }
-            : p,
-        );
+      // 3. KICK OLD CONNECTIONS
+      // We loop through matches to ensure we kick the socket even if duplicates exist
+      existingEntries.forEach((player) => {
+        if (player.socketId && player.socketId !== socket.id) {
+          const oldSocket = this.io.sockets.sockets.get(player.socketId);
+          if (oldSocket) {
+            console.log(
+              `👢 Kicking old connection for ${socket.user!.full_name} (${
+                player.socketId
+              })`,
+            );
+            oldSocket.emit("force_disconnect", {
+              message: "You have opened the game in another tab.",
+            });
+            oldSocket.disconnect(true);
+          }
+        }
+      });
 
-        await this.updateLobby(lobbyId, {
-          players: updatedPlayers,
-        });
-      } else {
-        // FIX: Add completely new player with score 0
-        const newPlayer = {
-          userId: socket.user!._id,
-          name: socket.user!.full_name,
-          email: socket.user!.emailId,
-          score: 0, // New player starts with 0
-          joinedAt: new Date(),
-          roundScores: [],
-          socketId: socket.id,
-          hasAnsweredCurrentQuestion: false,
-          lastAnswerTime: undefined,
-          lastAnswerCorrect: undefined,
-        };
+      // 4. PRESERVE STATE (Score, etc.)
+      // We take the data from the first match found (if any)
+      const previousState =
+        existingEntries.length > 0 ? existingEntries[0] : null;
 
-        await this.updateLobby(lobbyId, {
-          players: [...lobby.players, newPlayer],
-        });
-      }
+      // 5. CLEAN THE ARRAY (Remove ALL instances of this user)
+      // This wipes out duplicates from the DB array immediately
+      const otherPlayers = lobby.players.filter(
+        (p) => String(p.userId) !== currentUserId,
+      );
 
-      // Leave previous lobby if any
+      // 6. CREATE SINGLE CONSOLIDATED PLAYER
+      const playerToSave = {
+        userId: currentUserId, // STRICTLY USE THE STRING VARIABLE
+        name: socket.user!.full_name,
+        email: socket.user!.emailId,
+        // Preserve score/history if they existed, otherwise default
+        score: previousState ? previousState.score : 0,
+        roundScores: previousState ? previousState.roundScores : [],
+        joinedAt: previousState ? previousState.joinedAt : new Date(),
+        // Set NEW socket ID
+        socketId: socket.id,
+        hasAnsweredCurrentQuestion: false,
+        lastAnswerTime: undefined,
+        lastAnswerCorrect: undefined,
+      };
+
+      // 7. SAVE TO DB
+      await this.updateLobby(lobbyId, {
+        players: [...otherPlayers, playerToSave],
+      });
+
+      // --- CONNECTION LOGIC ---
+
+      // Leave previous rooms
       this.leaveLobby(socket);
 
       // Join socket room
       socket.join(lobbyId);
-      this.userLobbyMap.set(socket.user!._id, lobbyId);
+      this.userLobbyMap.set(currentUserId, lobbyId);
 
-      // Get updated lobby data
+      // Get fresh lobby data to send to frontend
       const updatedLobby = await this.getLobby(lobbyId);
       if (!updatedLobby) return;
 
-      // Find the current player's data
       const currentPlayer = updatedLobby.players.find(
-        (p) => p.userId === socket.user!._id,
+        (p) => String(p.userId) === currentUserId,
       );
 
-      // GET TOTAL ROUNDS AND CURRENT ROUND INFO
+      // Get Round Info
       const totalRounds = await this.getTotalRounds();
       const currentRoundIndex = this.currentRounds.get(lobbyId) || 0;
       let totalQuestionsInRound = 0;
 
-      // If there's a current round, get its info
       if (currentRoundIndex >= 0) {
         totalQuestionsInRound = await this.getTotalQuestionsInRoundByIndex(
           currentRoundIndex,
         );
       }
 
-      // Broadcast user joined to lobby
+      // Broadcast to others
       socket.to(lobbyId).emit("lobby-update", {
         type: "player-joined",
         data: {
           player: {
-            userId: socket.user!._id,
+            userId: currentUserId,
             name: socket.user!.full_name,
             score: currentPlayer?.score || 0,
           },
@@ -1111,7 +1126,7 @@ class TriviaSocket {
         },
       });
 
-      // Send complete lobby state to the joining user
+      // Send state to self
       socket.emit("lobby-joined", {
         lobby: this.formatLobbyForClient(updatedLobby),
         totalRounds,
@@ -1120,9 +1135,9 @@ class TriviaSocket {
       });
 
       console.log(
-        `User ${socket.user!.full_name} joined lobby ${lobbyId} with score: ${
-          currentPlayer?.score || 0
-        }`,
+        `User ${
+          socket.user!.full_name
+        } joined lobby ${lobbyId} (Cleaned & Updated)`,
       );
     } catch (error) {
       console.error("Error joining lobby:", error);
@@ -1208,6 +1223,10 @@ class TriviaSocket {
         return;
       }
 
+      if (player) {
+        player.hasAnsweredCurrentQuestion = true;
+      }
+
       // 2. Validate Timer
       const questionStartTime = this.questionStartTimes.get(lobbyId);
       if (!questionStartTime) {
@@ -1284,6 +1303,7 @@ class TriviaSocket {
             hasAnsweredCurrentQuestion: true,
             lastAnswerTime: new Date(answerTime),
             lastAnswerCorrect: isCorrect,
+            lastAnswer: data.answer,
           };
         }
         return p;
@@ -1393,6 +1413,7 @@ class TriviaSocket {
           hasAnsweredCurrentQuestion: false,
           lastAnswerTime: undefined,
           lastAnswerCorrect: undefined,
+          lastAnswer: undefined,
         };
       });
 
@@ -1445,6 +1466,45 @@ class TriviaSocket {
         }
       }
 
+      // ==========================================================
+      // 🆕 NEW: CALCULATE ANSWER ANALYTICS
+      // ==========================================================
+      let totalAnswered = 0;
+      const choiceDistribution: Record<string, number> = {};
+
+      const currentQuestion = lobby.currentQuestion;
+
+      if (!currentQuestion || !currentQuestion.choices) {
+        console.log("⚠️ No question data available for analytics");
+      } else {
+        // 1. Initialize counts to 0 for all available choices
+        currentQuestion.choices.forEach((choice: string) => {
+          choiceDistribution[choice] = 0;
+        });
+
+        // 2. Loop through players and count their ACTUAL selected answer
+        lobby.players.forEach((player) => {
+          // Only count if they answered
+          if (player.hasAnsweredCurrentQuestion && player.lastAnswer) {
+            // We use the stored string directly
+            const answer = player.lastAnswer;
+
+            // Increment count if it's a valid choice
+            if (choiceDistribution.hasOwnProperty(answer)) {
+              choiceDistribution[answer] =
+                (choiceDistribution[answer] || 0) + 1;
+              totalAnswered++;
+            }
+          }
+        });
+
+        console.log(
+          `📊 Question Analytics for Q${nextIndex}:`,
+          choiceDistribution,
+          `Total Answers: ${totalAnswered}`,
+        );
+      }
+
       const updatedLobby = await this.updateLobby(lobbyId, {
         status: "waiting",
         gameState: "results",
@@ -1462,12 +1522,16 @@ class TriviaSocket {
           return {
             userId: p.userId,
             name: p.name,
-            score: p.score,
+            score: p.score, // Total Game Score
             roundScore: roundEntry ? roundEntry.score : 0,
             lastAnswerCorrect: p.lastAnswerCorrect,
           };
         })
-        .sort((a, b) => b.roundScore - a.roundScore);
+        .sort((a, b) => b.score - a.score)
+        .map((player, index) => ({
+          ...player,
+          rank: index + 1,
+        }));
 
       this.io.to(lobbyId).emit("lobby-update", {
         type: "question-ended",
@@ -1475,6 +1539,11 @@ class TriviaSocket {
           correctAnswer: lobby.currentQuestion?.correctAnswer,
           leaderboard: leaderboard,
           isRoundOver: isLastQuestion,
+          // 🆕 NEW: Include analytics data
+          questionAnalytics: {
+            totalAnswered,
+            choiceDistribution,
+          },
         },
       });
 
@@ -1505,7 +1574,7 @@ class TriviaSocket {
           rank: index + 1,
         }));
 
-      // 2. Save to GameSession (for if user refreshes page)
+      // 2. Save to GameSession
       let gameSessionId = null;
       try {
         const gameSession = await GameSession.create({
@@ -1533,27 +1602,17 @@ class TriviaSocket {
       console.log(`📨 Sent game-ended with ${rankedPlayers.length} players`);
 
       // 4. Force Disconnect Players
-      // This kicks them off the socket so they don't try to send more data
-      // fetchSockets() returns RemoteSocket[], we need to cast or use carefully
       const roomSockets = await this.io.in(lobbyId).fetchSockets();
       for (const s of roomSockets) {
-        // We cast to access the 'user' property we added in authentication
         const authSocket = s as unknown as AuthenticatedSocket;
-
-        // Remove from your internal tracking map
         if (authSocket.user) {
           this.userLobbyMap.delete(authSocket.user._id);
         }
-
-        // Force disconnect the socket
         s.disconnect(true);
       }
 
       // 5. WIPE PLAYERS FROM DB
-      // We empty the array completely to ensure no one is "stuck" in the lobby
       lobby.players = [];
-
-      // Reset lobby state for next game
       lobby.status = "waiting";
       lobby.currentQuestion = null;
       lobby.currentQuestionIndex = 0;
@@ -1562,6 +1621,12 @@ class TriviaSocket {
       lobby.roundProgress = [];
 
       await lobby.save();
+
+      // =================================================================
+      // CRITICAL FIX: Update the in-memory cache to match the DB reset.
+      // Without this, 'getLobby' returns the OLD state (with players/scores)
+      // =================================================================
+      this.lobbyInstances.set(lobbyId, lobby);
 
       // Reset memory tracking
       this.currentRounds.set(lobbyId, -1);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trophy, Loader2, RefreshCw } from "lucide-react";
+import { Trophy, Loader2 } from "lucide-react"; // Removed RefreshCw
 
 interface Player {
   rank: number;
@@ -19,8 +19,9 @@ interface Round {
 interface LeaderboardCardProps {
   currentRoundIndex: number;
   rounds?: Round[];
-  isHost?: boolean;      // Pass true for Host Panel
-  currentUserId?: string; // Pass the logged-in user's ID for Player Panel
+  isHost?: boolean;
+  currentUserId?: string;
+  liveLeaderboard?: Player[];
 }
 
 export function LeaderboardCard({
@@ -28,6 +29,7 @@ export function LeaderboardCard({
   rounds: propRounds,
   isHost = false,
   currentUserId,
+  liveLeaderboard,
 }: LeaderboardCardProps) {
   const [selectedRoundId, setSelectedRoundId] = useState<string>("overall");
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
@@ -37,14 +39,17 @@ export function LeaderboardCard({
   const API_BASE = import.meta.env.VITE_API_URL;
   const activeRounds = propRounds || fetchedRounds;
 
-  // 1. Fetch Rounds if not provided
+  // 1. Fetch Rounds if not provided (Standard setup)
   useEffect(() => {
     if (propRounds) return;
     const fetchRounds = async () => {
       try {
         const userDataStr = localStorage.getItem("user");
         const userData = userDataStr ? JSON.parse(userDataStr) : {};
-        const token = localStorage.getItem("hostJwtToken") || localStorage.getItem("jwtToken") || userData.token;
+        const token =
+          localStorage.getItem("hostJwtToken") ||
+          localStorage.getItem("jwtToken") ||
+          userData.token;
 
         const res = await fetch(`${API_BASE}/questions/rounds`, {
           headers: { Authorization: token ? `Bearer ${token}` : "" },
@@ -60,58 +65,64 @@ export function LeaderboardCard({
     fetchRounds();
   }, [API_BASE, propRounds]);
 
-  // 2. Fetch Leaderboard on change
   useEffect(() => {
-    fetchLeaderboard();
-  }, [selectedRoundId, currentRoundIndex]);
-
-  const fetchLeaderboard = async () => {
-    setIsLoading(true);
-    try {
-      const userDataStr = localStorage.getItem("user");
-      const userData = userDataStr ? JSON.parse(userDataStr) : {};
-      const token = localStorage.getItem("hostJwtToken") || localStorage.getItem("jwtToken") || userData.token;
-
-      let url = `${API_BASE}/lobbies/main-lobby/leaderboard`;
-      if (selectedRoundId !== "overall") {
-        url += `?type=round&roundId=${selectedRoundId}`;
-      }
-
-      const response = await fetch(url, {
-        headers: { Authorization: token ? `Bearer ${token}` : "" },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setLeaderboard(data.leaderboard || []);
-      }
-    } catch (error) {
-      console.error("Error fetching leaderboard:", error);
-    } finally {
+    if (liveLeaderboard && liveLeaderboard.length > 0) {
+      setLeaderboard(liveLeaderboard);
       setIsLoading(false);
+      return;
     }
-  };
+
+    const fetchLeaderboard = async () => {
+      setIsLoading(true);
+      try {
+        const userDataStr = localStorage.getItem("user");
+        const userData = userDataStr ? JSON.parse(userDataStr) : {};
+        const token =
+          localStorage.getItem("hostJwtToken") ||
+          localStorage.getItem("jwtToken") ||
+          userData.token;
+
+        let url = `${API_BASE}/lobbies/main-lobby/leaderboard`;
+        if (selectedRoundId !== "overall") {
+          url += `?type=round&roundId=${selectedRoundId}`;
+        }
+
+        const response = await fetch(url, {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setLeaderboard(data.leaderboard || []);
+        }
+      } catch (error) {
+        console.error("Error fetching leaderboard:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLeaderboard();
+  }, [liveLeaderboard, selectedRoundId, currentRoundIndex, API_BASE]);
 
   const getRankStyles = (index: number) => {
-    if (index === 0) return "bg-yellow-500 text-white shadow-sm ring-2 ring-yellow-500/20";
-    if (index === 1) return "bg-zinc-300 text-zinc-900 shadow-sm ring-2 ring-zinc-300/20";
-    if (index === 2) return "bg-orange-500 text-white shadow-sm ring-2 ring-orange-500/20";
+    if (index === 0)
+      return "bg-yellow-500 text-white shadow-sm ring-2 ring-yellow-500/20";
+    if (index === 1)
+      return "bg-zinc-300 text-zinc-900 shadow-sm ring-2 ring-zinc-300/20";
+    if (index === 2)
+      return "bg-orange-500 text-white shadow-sm ring-2 ring-orange-500/20";
     return "bg-zinc-800 text-zinc-400 border border-zinc-700";
   };
 
-  /**
-   * Logic to filter who we show:
-   * 1. Always Top 5.
-   * 2. If User is not in Top 5, append them at the end.
-   */
   const getDisplayPlayers = () => {
     const top5 = leaderboard.slice(0, 5);
-    
     if (isHost || !currentUserId) return top5;
 
-    const userRankIndex = leaderboard.findIndex((p) => p.userId === currentUserId);
-    
-    // If player is outside top 5, append them to the list
+    const userRankIndex = leaderboard.findIndex(
+      (p) => p.userId === currentUserId,
+    );
+
     if (userRankIndex >= 5) {
       return [...top5, leaderboard[userRankIndex]];
     }
@@ -126,16 +137,12 @@ export function LeaderboardCard({
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
         <div className="flex items-center gap-2">
           <Trophy className="w-6 h-6 text-yellow-500" />
-          <h2 className="text-3xl leaguegothic uppercase tracking-wider text-white">Leaderboard</h2>
+          <h2 className="text-3xl leaguegothic uppercase tracking-wider text-white">
+            Leaderboard
+          </h2>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={fetchLeaderboard}
-          className="h-8 w-8 text-white/40 hover:text-white"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-        </Button>
+
+        {/* REFRESH BUTTON REMOVED HERE - No longer needed */}
       </div>
 
       {/* Filter Tabs */}
@@ -175,18 +182,21 @@ export function LeaderboardCard({
             <Loader2 className="animate-spin text-white/20" />
           </div>
         ) : leaderboard.length === 0 ? (
-          <div className="text-center py-10 text-white/40 text-sm">No scores recorded yet.</div>
+          <div className="text-center py-10 text-white/40 text-sm">
+            No scores recorded yet.
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {displayPlayers.map((player, index) => {
-              // Calculate real rank from original leaderboard array
-              const actualRankIndex = leaderboard.findIndex((p) => p.userId === player.userId);
+              const actualRankIndex = leaderboard.findIndex(
+                (p) => p.userId === player.userId,
+              );
               const isCurrentUser = player.userId === currentUserId;
-              const isJumpedRank = !isHost && index === 5 && actualRankIndex >= 5;
+              const isJumpedRank =
+                !isHost && index === 5 && actualRankIndex >= 5;
 
               return (
                 <div key={player.userId}>
-                  {/* Show "..." divider if there's a gap between Top 5 and the player */}
                   {isJumpedRank && (
                     <div className="flex justify-center py-1 opacity-20">
                       <span className="text-[10px] font-bold tracking-widest text-white">
@@ -205,7 +215,7 @@ export function LeaderboardCard({
                     <div className="flex items-center gap-3">
                       <div
                         className={`flex h-6 w-6 items-center justify-center rounded-full font-bold text-[10px] ${getRankStyles(
-                          actualRankIndex
+                          actualRankIndex,
                         )}`}
                       >
                         {actualRankIndex + 1}
@@ -215,11 +225,19 @@ export function LeaderboardCard({
                           isCurrentUser ? "text-yellow-400" : "text-white"
                         }`}
                       >
-                        {player.name} {isCurrentUser && <span className="text-[10px] opacity-60 ml-1">(YOU)</span>}
+                        {player.name}{" "}
+                        {isCurrentUser && (
+                          <span className="text-[10px] opacity-60 ml-1">
+                            (YOU)
+                          </span>
+                        )}
                       </span>
                     </div>
                     <span className="text-sm font-bold text-white">
-                      {selectedRoundId === "overall" ? player.score : player.roundScore} pts
+                      {selectedRoundId === "overall"
+                        ? player.score
+                        : player.roundScore}{" "}
+                      pts
                     </span>
                   </div>
                 </div>
