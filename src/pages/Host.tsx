@@ -1390,7 +1390,9 @@ const Host = () => {
               currentRoundIndex={currentRound} 
               rounds={rounds} 
             /> */}
-            <QuestionAnalyticsSummary analytics={lastQuestionAnalytics} />
+            {lastQuestionAnalytics && (
+              <QuestionAnalyticsSummary analytics={lastQuestionAnalytics} />
+            )}
             <LeaderboardCard
               currentRoundIndex={0}
               isHost={true}
