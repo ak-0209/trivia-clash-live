@@ -1018,130 +1018,106 @@ class TriviaSocket {
     await this.startQuestion(lobbyId, questionIndex);
   }
 
+  // Inside your Socket Service / Controller
   private async joinLobby(socket: AuthenticatedSocket, lobbyId: string) {
     try {
+      // 1. Fetch fresh lobby data from DB
       const lobby = await this.getLobby(lobbyId);
       if (!lobby) {
         socket.emit("error", { message: "Failed to join lobby" });
         return;
       }
 
-      // 1. Normalize ID to String (Critical for matching)
       const currentUserId = String(socket.user!._id);
 
-      // 2. Find ANY existing entries for this user (handles duplicates)
-      const existingEntries = lobby.players.filter(
-        (p) => String(p.userId) === currentUserId,
-      );
+      // 2. Identify existing player state to preserve scores/status
+      const existingPlayer = lobby.players.find(p => String(p.userId) === currentUserId);
 
-      // 3. KICK OLD CONNECTIONS
-      // We loop through matches to ensure we kick the socket even if duplicates exist
-      existingEntries.forEach((player) => {
-        if (player.socketId && player.socketId !== socket.id) {
-          const oldSocket = this.io.sockets.sockets.get(player.socketId);
-          if (oldSocket) {
-            console.log(
-              `👢 Kicking old connection for ${socket.user!.full_name} (${
-                player.socketId
-              })`,
-            );
-            oldSocket.emit("force_disconnect", {
-              message: "You have opened the game in another tab.",
-            });
-            oldSocket.disconnect(true);
-          }
+      // 3. Kick old/duplicate connections
+      if (existingPlayer?.socketId && existingPlayer.socketId !== socket.id) {
+        const oldSocket = this.io.sockets.sockets.get(existingPlayer.socketId);
+        if (oldSocket) {
+          oldSocket.emit("force_disconnect", { message: "Opened in another tab." });
+          oldSocket.disconnect(true);
         }
-      });
+      }
 
-      // 4. PRESERVE STATE (Score, etc.)
-      // We take the data from the first match found (if any)
-      const previousState =
-        existingEntries.length > 0 ? existingEntries[0] : null;
-
-      // 5. CLEAN THE ARRAY (Remove ALL instances of this user)
-      // This wipes out duplicates from the DB array immediately
-      const otherPlayers = lobby.players.filter(
-        (p) => String(p.userId) !== currentUserId,
-      );
-
-      // 6. CREATE SINGLE CONSOLIDATED PLAYER
+      // 4. Update the player list with the new socket.id
       const playerToSave = {
-        userId: currentUserId, // STRICTLY USE THE STRING VARIABLE
+        userId: currentUserId,
         name: socket.user!.full_name,
         email: socket.user!.emailId,
-        // Preserve score/history if they existed, otherwise default
-        score: previousState ? previousState.score : 0,
-        roundScores: previousState ? previousState.roundScores : [],
-        joinedAt: previousState ? previousState.joinedAt : new Date(),
-        // Set NEW socket ID
+        score: existingPlayer ? existingPlayer.score : 0,
+        roundScores: existingPlayer ? existingPlayer.roundScores : [],
+        joinedAt: existingPlayer ? existingPlayer.joinedAt : new Date(),
         socketId: socket.id,
-        hasAnsweredCurrentQuestion: false,
-        lastAnswerTime: undefined,
-        lastAnswerCorrect: undefined,
+        // Preserve answer status so they can't vote twice on reload
+        hasAnsweredCurrentQuestion: existingPlayer ? existingPlayer.hasAnsweredCurrentQuestion : false,
+        lastAnswer: existingPlayer?.lastAnswer,
       };
 
-      // 7. SAVE TO DB
+      const otherPlayers = lobby.players.filter(p => String(p.userId) !== currentUserId);
+      
+      // Save updated player state to DB
       await this.updateLobby(lobbyId, {
         players: [...otherPlayers, playerToSave],
       });
 
-      // --- CONNECTION LOGIC ---
-
-      // Leave previous rooms
-      this.leaveLobby(socket);
-
-      // Join socket room
+      // 5. Join Socket Room
       socket.join(lobbyId);
       this.userLobbyMap.set(currentUserId, lobbyId);
 
-      // Get fresh lobby data to send to frontend
+      // 6. SYNC LOGIC: Calculate real-time countdown
       const updatedLobby = await this.getLobby(lobbyId);
       if (!updatedLobby) return;
 
-      const currentPlayer = updatedLobby.players.find(
-        (p) => String(p.userId) === currentUserId,
-      );
+      const isGameActive = updatedLobby.status === "in-progress" || updatedLobby.status === "starting";
+      let syncCountdown = updatedLobby.countdown;
 
-      // Get Round Info
-      const totalRounds = await this.getTotalRounds();
-      const currentRoundIndex = this.currentRounds.get(lobbyId) || 0;
-      let totalQuestionsInRound = 0;
-
-      if (currentRoundIndex >= 0) {
-        totalQuestionsInRound = await this.getTotalQuestionsInRoundByIndex(
-          currentRoundIndex,
-        );
+      // If the game is live, calculate exactly how many seconds are left
+      if (isGameActive && updatedLobby.startTime && updatedLobby.currentQuestion) {
+        const startTime = new Date(updatedLobby.startTime).getTime();
+        const now = new Date().getTime();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        const totalAllowed = updatedLobby.currentQuestion.timeLimit || 30;
+        
+        // Calculate remaining time
+        syncCountdown = Math.max(0, totalAllowed - elapsedSeconds);
       }
 
-      // Broadcast to others
+      // 7. Format and Emit Hydrated State
+      const formattedLobby = this.formatLobbyForClient(updatedLobby);
+      
+      // Override the static countdown with our calculated one
+      formattedLobby.countdown = syncCountdown;
+
+      socket.emit("lobby-joined", {
+        lobby: formattedLobby,
+        currentQuestion: isGameActive ? updatedLobby.currentQuestion : null,
+        userHasAnswered: playerToSave.hasAnsweredCurrentQuestion,
+        totalRounds: updatedLobby.totalRounds || 0,
+        currentRound: updatedLobby.currentRound || 0,
+        totalQuestionsInRound: updatedLobby.totalQuestionsInRound || 0,
+      });
+
+      // Notify others
       socket.to(lobbyId).emit("lobby-update", {
         type: "player-joined",
         data: {
-          player: {
-            userId: currentUserId,
+          player: { 
+            userId: currentUserId, 
             name: socket.user!.full_name,
-            score: currentPlayer?.score || 0,
+            score: playerToSave.score 
           },
           playerCount: updatedLobby.players.length,
         },
       });
 
-      // Send state to self
-      socket.emit("lobby-joined", {
-        lobby: this.formatLobbyForClient(updatedLobby),
-        totalRounds,
-        currentRound: currentRoundIndex,
-        totalQuestionsInRound,
-      });
+      console.log(`✅ ${socket.user!.full_name} re-synced to lobby: ${lobbyId} (${syncCountdown}s left)`);
 
-      console.log(
-        `User ${
-          socket.user!.full_name
-        } joined lobby ${lobbyId} (Cleaned & Updated)`,
-      );
     } catch (error) {
-      console.error("Error joining lobby:", error);
-      socket.emit("error", { message: "Failed to join lobby" });
+      console.error("Critical Error in joinLobby:", error);
+      socket.emit("error", { message: "Internal server error during sync" });
     }
   }
 

@@ -47,7 +47,7 @@
 /* GRID LAYOUT */
 .hostpanel-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr;
+  grid-template-columns: 1.25fr 1.25fr;
   gap: 1.5rem;
 }
 

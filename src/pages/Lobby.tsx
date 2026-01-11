@@ -48,6 +48,7 @@ interface LobbyData {
     name: string;
     isOnline: boolean;
   };
+  userHasAnswered:boolean;
 }
 
 const Lobby = () => {
@@ -86,9 +87,6 @@ const Lobby = () => {
   // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
   const currentUserId = userData.id || userData.userId;
 
-  // If you are in the host panel, you can determine it like this:
-  const isHostPanel = !!localStorage.getItem("hostJwtToken");
-
   // ADD THIS: Effect to handle timer based on lobbyStatus
   useEffect(() => {
     // Clear any existing timer
@@ -97,9 +95,11 @@ const Lobby = () => {
       timerIntervalRef.current = null;
     }
 
-    // FIX: Only start local timer for 'active' state.
-    // The 'countdown' state relies on server socket events (case "countdown").
-    if (lobbyStatus === "active" && countdown > 0) {
+    // Only start timer if we're in countdown or active state
+    if (
+      (lobbyStatus === "active" || lobbyStatus === "countdown") &&
+      countdown > 0
+    ) {
       console.log(
         `Starting timer for ${lobbyStatus} with ${countdown} seconds`,
       );
@@ -112,6 +112,12 @@ const Lobby = () => {
               clearInterval(timerIntervalRef.current);
               timerIntervalRef.current = null;
             }
+
+            // If countdown finished, update status
+            if (lobbyStatus === "countdown") {
+              setLobbyStatus("active");
+            }
+
             return 0;
           }
           return prev - 1;
@@ -126,7 +132,7 @@ const Lobby = () => {
         timerIntervalRef.current = null;
       }
     };
-  }, [lobbyStatus]);
+  }, [lobbyStatus]); // Re-run when lobbyStatus changes
 
   useEffect(() => {
     // Get user data from localStorage
@@ -281,30 +287,6 @@ const Lobby = () => {
       handleLobbyUpdate(data.type, data.data);
     });
 
-    socket.on("force_disconnect", (data: { message: string }) => {
-      console.log("Force disconnected:", data.message);
-
-      // 1. Permanently disconnect socket so it doesn't auto-reconnect
-      socket.disconnect();
-
-      // 2. Clear token so they have to login again (optional, but safer)
-      localStorage.removeItem("jwtToken");
-      localStorage.removeItem("user");
-
-      // 3. Show error toast
-      toast({
-        title: "Disconnected",
-        description:
-          data.message ||
-          "You have been logged out because you opened the game in another tab.",
-        variant: "destructive",
-        duration: 10000, // Show for 10 seconds
-      });
-
-      // 4. Redirect to login/home
-      navigate("/auth");
-    });
-
     // Cleanup on unmount
     return () => {
       // Clear timer interval
@@ -320,38 +302,43 @@ const Lobby = () => {
     };
   }, [navigate, toast]);
 
-  const updateLobbyState = (lobby: LobbyData) => {
-    // Clear timer if exists
+  const updateLobbyState = (data: any) => {
+    // Clear any old local timers
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
 
-    setCountdown(lobby.countdown || 0);
+    // 1. Extract data correctly (handling nested or flat structure)
+    const lobby = data.lobby || data;
+    const serverQuestion = data.currentQuestion || lobby.currentQuestion;
+    const userHasAnswered = data.userHasAnswered ?? lobby.userHasAnswered ?? false;
+
+    // 2. Set Metadata
+    setLobbyName(lobby.name || "Main Lobby");
     setPlayerCount(lobby.playerCount || 0);
     setLobbyUsers(lobby.players || []);
-    setLobbyName(lobby.name || "Main Lobby");
-    setLobbyStatus(lobby.status || "waiting");
+    
+    // Normalize status: "in-progress" -> "active"
+    const normalizedStatus = (lobby.status === 'in-progress' ? 'active' : lobby.status) || "waiting";
+    setLobbyStatus(normalizedStatus);
+    
+    setCountdown(lobby.countdown || 0);
     setCurrentQuestionIndex(lobby.currentQuestionIndex || 0);
 
-    // Only set total questions from lobby if we haven't received it from server
-    if (lobby.totalQuestions && totalQuestions === 0) {
-      setTotalQuestions(lobby.totalQuestions);
+    // 3. SET THE QUESTION FROM SERVER DATA (Fixes the Reload bug)
+    if (serverQuestion) {
+      console.log("Rehydrating question:", serverQuestion);
+      setCurrentQuestion(serverQuestion);
+      setHasAnswered(userHasAnswered);
     }
 
-    // Only set total rounds from lobby if we haven't received it from server
-    if (lobby.totalRounds && totalRounds === 0) {
-      setTotalRounds(lobby.totalRounds);
+    // 4. Sync Rounds
+    if (data.totalRounds || lobby.totalRounds) {
+      setTotalRounds(data.totalRounds || lobby.totalRounds);
     }
-
-    // Only set current round from lobby if we haven't received it from server
-    if (lobby.currentRound !== undefined && currentRound === 0) {
-      setCurrentRound(lobby.currentRound);
-    }
-
-    // Only set total questions in round from lobby if we haven't received it from server
-    if (lobby.totalQuestionsInRound && totalQuestionsInRound === 0) {
-      setTotalQuestionsInRound(lobby.totalQuestionsInRound);
+    if (data.currentRound !== undefined || lobby.currentRound !== undefined) {
+      setCurrentRound(data.currentRound ?? lobby.currentRound);
     }
   };
 
@@ -441,9 +428,6 @@ const Lobby = () => {
         setCurrentQuestion(null);
         setHasAnswered(false);
         setCountdown(0);
-        if (data.leaderboard) {
-          setLiveLeaderboard(data.leaderboard);
-        }
         toast({
           title: "Question Ended!",
           description: `Correct answer: ${data.correctAnswer}`,
@@ -478,22 +462,9 @@ const Lobby = () => {
 
         setLobbyStatus("waiting");
         setCountdown(0);
-
-        // =================================================================
-        // FIX: Navigate to the leaderboard page
-        // =================================================================
-        // Assuming your route is /leaderboard.
-        // You can pass data via state if your leaderboard needs it.
-        navigate("/leaderboard", {
-          state: {
-            finalResults: data.leaderboard,
-            gameSessionId: data.gameSessionId,
-          },
-        });
-
         toast({
           title: "Game Over!",
-          description: "Redirecting to results...",
+          description: `Winner: ${data.winner.name} with ${data.winner.score} points`,
         });
         break;
 
@@ -559,24 +530,10 @@ const Lobby = () => {
     navigate("/");
   };
 
-  const getStatusDisplay = () => {
-    switch (lobbyStatus) {
-      case "countdown":
-        return {
-          text: "⏰ COUNTDOWN",
-          color: "bg-yellow-500",
-          badge: "secondary",
-        };
-      case "active":
-        return { text: "🔴 LIVE", color: "bg-red-500", badge: "default" };
-      case "waiting":
-      default:
-        return { text: "⏹️ WAITING", color: "bg-gray-500", badge: "secondary" };
-    }
-  };
-
   const totalTime = 30;
   const progress = (countdown / totalTime) * 100;
+
+  console.log(currentQuestion);
 
   return (
     <div
