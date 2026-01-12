@@ -162,6 +162,10 @@ const Host = () => {
           totalQuestionsInRound,
         } = data;
 
+        if (lobby && lobby.streamUrl) {
+          setCurrentStreamUrl(lobby.streamUrl);
+        }
+
         if (totalRounds) {
           setTotalRounds(totalRounds);
         }

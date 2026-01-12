@@ -1031,13 +1031,17 @@ class TriviaSocket {
       const currentUserId = String(socket.user!._id);
 
       // 2. Identify existing player state to preserve scores/status
-      const existingPlayer = lobby.players.find(p => String(p.userId) === currentUserId);
+      const existingPlayer = lobby.players.find(
+        (p) => String(p.userId) === currentUserId,
+      );
 
       // 3. Kick old/duplicate connections
       if (existingPlayer?.socketId && existingPlayer.socketId !== socket.id) {
         const oldSocket = this.io.sockets.sockets.get(existingPlayer.socketId);
         if (oldSocket) {
-          oldSocket.emit("force_disconnect", { message: "Opened in another tab." });
+          oldSocket.emit("force_disconnect", {
+            message: "Opened in another tab.",
+          });
           oldSocket.disconnect(true);
         }
       }
@@ -1052,12 +1056,16 @@ class TriviaSocket {
         joinedAt: existingPlayer ? existingPlayer.joinedAt : new Date(),
         socketId: socket.id,
         // Preserve answer status so they can't vote twice on reload
-        hasAnsweredCurrentQuestion: existingPlayer ? existingPlayer.hasAnsweredCurrentQuestion : false,
+        hasAnsweredCurrentQuestion: existingPlayer
+          ? existingPlayer.hasAnsweredCurrentQuestion
+          : false,
         lastAnswer: existingPlayer?.lastAnswer,
       };
 
-      const otherPlayers = lobby.players.filter(p => String(p.userId) !== currentUserId);
-      
+      const otherPlayers = lobby.players.filter(
+        (p) => String(p.userId) !== currentUserId,
+      );
+
       // Save updated player state to DB
       await this.updateLobby(lobbyId, {
         players: [...otherPlayers, playerToSave],
@@ -1071,23 +1079,29 @@ class TriviaSocket {
       const updatedLobby = await this.getLobby(lobbyId);
       if (!updatedLobby) return;
 
-      const isGameActive = updatedLobby.status === "in-progress" || updatedLobby.status === "starting";
+      const isGameActive =
+        updatedLobby.status === "in-progress" ||
+        updatedLobby.status === "starting";
       let syncCountdown = updatedLobby.countdown;
 
       // If the game is live, calculate exactly how many seconds are left
-      if (isGameActive && updatedLobby.startTime && updatedLobby.currentQuestion) {
+      if (
+        isGameActive &&
+        updatedLobby.startTime &&
+        updatedLobby.currentQuestion
+      ) {
         const startTime = new Date(updatedLobby.startTime).getTime();
         const now = new Date().getTime();
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
         const totalAllowed = updatedLobby.currentQuestion.timeLimit || 30;
-        
+
         // Calculate remaining time
         syncCountdown = Math.max(0, totalAllowed - elapsedSeconds);
       }
 
       // 7. Format and Emit Hydrated State
       const formattedLobby = this.formatLobbyForClient(updatedLobby);
-      
+
       // Override the static countdown with our calculated one
       formattedLobby.countdown = syncCountdown;
 
@@ -1104,17 +1118,20 @@ class TriviaSocket {
       socket.to(lobbyId).emit("lobby-update", {
         type: "player-joined",
         data: {
-          player: { 
-            userId: currentUserId, 
+          player: {
+            userId: currentUserId,
             name: socket.user!.full_name,
-            score: playerToSave.score 
+            score: playerToSave.score,
           },
           playerCount: updatedLobby.players.length,
         },
       });
 
-      console.log(`✅ ${socket.user!.full_name} re-synced to lobby: ${lobbyId} (${syncCountdown}s left)`);
-
+      console.log(
+        `✅ ${
+          socket.user!.full_name
+        } re-synced to lobby: ${lobbyId} (${syncCountdown}s left)`,
+      );
     } catch (error) {
       console.error("Critical Error in joinLobby:", error);
       socket.emit("error", { message: "Internal server error during sync" });
@@ -1146,11 +1163,17 @@ class TriviaSocket {
   }
 
   // Handle host stream control
-  private handleHostStreamControl(
+  private async handleHostStreamControl(
     socket: AuthenticatedSocket,
     data: { lobbyId: string; action: string; value: any },
   ) {
     const { lobbyId, action, value } = data;
+
+    if (action === "change_url") {
+      await this.updateLobby(lobbyId, {
+        streamUrl: value,
+      });
+    }
 
     console.log(
       `🎮 Host stream control: ${action} = ${value} for lobby: ${lobbyId}`,
@@ -1647,6 +1670,7 @@ class TriviaSocket {
       totalRounds: lobby.totalRounds,
       currentRound: lobby.currentRound,
       totalQuestionsInRound: lobby.totalQuestionsInRound,
+      streamUrl: lobby.streamUrl,
     };
   }
 

@@ -48,7 +48,8 @@ interface LobbyData {
     name: string;
     isOnline: boolean;
   };
-  userHasAnswered:boolean;
+  userHasAnswered: boolean;
+  streamUrl?: string;
 }
 
 const Lobby = () => {
@@ -56,7 +57,7 @@ const Lobby = () => {
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
   const constraintsRef = useRef(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null); // ADD THIS REF
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [countdown, setCountdown] = useState(0);
   const [playerCount, setPlayerCount] = useState(0);
@@ -256,6 +257,9 @@ const Lobby = () => {
         if (data.totalQuestions) {
           setTotalQuestions(data.totalQuestions);
         }
+        if (data.lobby.streamUrl) {
+          setCurrentStreamUrl(data.lobby.streamUrl);
+        }
 
         updateLobbyState(data.lobby);
         toast({
@@ -312,17 +316,19 @@ const Lobby = () => {
     // 1. Extract data correctly (handling nested or flat structure)
     const lobby = data.lobby || data;
     const serverQuestion = data.currentQuestion || lobby.currentQuestion;
-    const userHasAnswered = data.userHasAnswered ?? lobby.userHasAnswered ?? false;
+    const userHasAnswered =
+      data.userHasAnswered ?? lobby.userHasAnswered ?? false;
 
     // 2. Set Metadata
     setLobbyName(lobby.name || "Main Lobby");
     setPlayerCount(lobby.playerCount || 0);
     setLobbyUsers(lobby.players || []);
-    
+
     // Normalize status: "in-progress" -> "active"
-    const normalizedStatus = (lobby.status === 'in-progress' ? 'active' : lobby.status) || "waiting";
+    const normalizedStatus =
+      (lobby.status === "in-progress" ? "active" : lobby.status) || "waiting";
     setLobbyStatus(normalizedStatus);
-    
+
     setCountdown(lobby.countdown || 0);
     setCurrentQuestionIndex(lobby.currentQuestionIndex || 0);
 

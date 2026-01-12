@@ -49,6 +49,7 @@ export interface ILobby extends Document {
     totalAnswered: number;
     choiceDistribution: Record<string, number>;
   };
+  streamUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +70,7 @@ const LobbySchema = new Schema(
       enum: ["lobby", "question", "answer", "results"],
       default: "lobby",
     },
+    streamUrl: { type: String },
     currentQuestion: { type: Schema.Types.Mixed },
     currentQuestionIndex: { type: Number },
     startTime: { type: Date },
