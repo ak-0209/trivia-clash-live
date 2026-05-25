@@ -1293,7 +1293,7 @@ class TriviaSocket {
     socket: AuthenticatedSocket,
     data: { questionId: string; answer: string },
   ) {
-    const userId = socket.user!._id;
+    const userId = String(socket.user!._id);
     const lobbyId = this.userLobbyMap.get(userId);
 
     if (!lobbyId) return;
@@ -1311,7 +1311,7 @@ class TriviaSocket {
       if (!currentQuestion) return;
 
       // 1. Check if user already answered
-      const player = lobby.players.find((p) => p.userId === userId);
+      const player = lobby.players.find((p) => String(p.userId) === userId);
       if (player?.hasAnsweredCurrentQuestion) {
         socket.emit("error", {
           message: "You have already answered this question",
@@ -1359,7 +1359,7 @@ class TriviaSocket {
 
       // 5. UPDATE PLAYER SCORES (Total + Round)
       const updatedPlayers = lobby.players.map((p) => {
-        if (p.userId === userId) {
+        if (String(p.userId) === userId) {
           const newTotalScore = p.score + pointsEarned;
 
           // ✅ NEW: Update Round Score
@@ -1400,6 +1400,7 @@ class TriviaSocket {
             lastAnswerTime: new Date(answerTime),
             lastAnswerCorrect: isCorrect,
             lastAnswer: data.answer,
+            lastPointsEarned: pointsEarned,
           };
         }
         return p;
@@ -1434,7 +1435,8 @@ class TriviaSocket {
           userId,
           userName: socket.user!.full_name,
           score:
-            updatedLobby.players.find((p) => p.userId === userId)?.score || 0,
+            updatedLobby.players.find((p) => String(p.userId) === userId)
+              ?.score || 0,
           pointsEarned,
           isCorrect,
           answerTime: timeTakenSeconds.toFixed(1),
@@ -1617,6 +1619,29 @@ class TriviaSocket {
         );
       }
 
+      // Snapshot results BEFORE clearing answer fields
+      const leaderboard = [...lobby.players]
+        .map((p) => {
+          const roundEntry = p.roundScores?.find(
+            (r) => r.roundId === currentRoundId,
+          );
+          return {
+            userId: p.userId,
+            name: p.name,
+            score: p.score,
+            roundScore: roundEntry ? roundEntry.score : 0,
+            lastAnswerCorrect: p.lastAnswerCorrect,
+            lastAnswer: p.lastAnswer,
+            lastPointsEarned: p.lastPointsEarned ?? 0,
+            answered: !!p.hasAnsweredCurrentQuestion,
+          };
+        })
+        .sort((a, b) => b.score - a.score)
+        .map((player, index) => ({
+          ...player,
+          rank: index + 1,
+        }));
+
       const updatedLobby = await this.updateLobby(lobbyId, {
         status: "waiting",
         gameState: "results",
@@ -1635,50 +1660,106 @@ class TriviaSocket {
           lastAnswerTime: undefined,
           lastAnswerCorrect: undefined,
           lastAnswer: undefined,
+          lastPointsEarned: 0,
         })),
       });
 
       if (!updatedLobby) return;
 
-      // Leaderboard Logic
-      const leaderboard = updatedLobby.players
-        .map((p) => {
-          const roundEntry = p.roundScores?.find(
-            (r) => r.roundId === currentRoundId,
-          );
-          return {
-            userId: p.userId,
-            name: p.name,
-            score: p.score, // Total Game Score
-            roundScore: roundEntry ? roundEntry.score : 0,
-            lastAnswerCorrect: p.lastAnswerCorrect,
-          };
-        })
-        .sort((a, b) => b.score - a.score)
-        .map((player, index) => ({
-          ...player,
-          rank: index + 1,
-        }));
-
       const currentRoundIndex = this.currentRounds.get(lobbyId) ?? 0;
+
+      const questionEndedPayload = {
+        correctAnswer: lobby.currentQuestion?.correctAnswer,
+        leaderboard: leaderboard,
+        isRoundOver: isLastQuestion,
+        completedQuestionIndex: lobby.currentQuestionIndex || 0,
+        nextQuestionIndex: nextIndex,
+        totalQuestionsInRound: totalQuestions,
+        currentRound: currentRoundIndex,
+        currentRoundId: currentRoundId,
+        roundName:
+          lobby.currentQuestion?.roundName ||
+          (currentRoundId ? undefined : undefined),
+        questionAnalytics: {
+          totalAnswered,
+          choiceDistribution,
+        },
+      };
 
       this.io.to(lobbyId).emit("lobby-update", {
         type: "question-ended",
-        data: {
-          correctAnswer: lobby.currentQuestion?.correctAnswer,
-          leaderboard: leaderboard,
-          isRoundOver: isLastQuestion,
-          completedQuestionIndex: lobby.currentQuestionIndex || 0,
-          nextQuestionIndex: nextIndex,
-          totalQuestionsInRound: totalQuestions,
-          currentRound: currentRoundIndex,
-          // 🆕 NEW: Include analytics data
-          questionAnalytics: {
-            totalAnswered,
-            choiceDistribution,
-          },
-        },
+        data: questionEndedPayload,
       });
+
+      const roomSockets = await this.io.in(lobbyId).fetchSockets();
+
+      for (const s of roomSockets) {
+        const authSocket = s as unknown as AuthenticatedSocket;
+        if (!authSocket.user || authSocket.handshake.auth?.isHost) continue;
+        const uid = String(authSocket.user._id);
+        const playerSnap = lobby.players.find((p) => String(p.userId) === uid);
+        if (!playerSnap) continue;
+        const roundEntry = playerSnap.roundScores?.find(
+          (r) => r.roundId === currentRoundId,
+        );
+        s.emit("lobby-update", {
+          type: "question-ended",
+          data: {
+            ...questionEndedPayload,
+            yourResult: {
+              answered: !!playerSnap.hasAnsweredCurrentQuestion,
+              isCorrect: playerSnap.lastAnswerCorrect,
+              lastAnswer: playerSnap.lastAnswer,
+              pointsEarned: playerSnap.lastPointsEarned ?? 0,
+              totalScore: playerSnap.score,
+              roundScore: roundEntry?.score ?? 0,
+            },
+          },
+        });
+      }
+
+      if (isLastQuestion) {
+        const rounds = await Round.find({}).sort({ order: 1 });
+        const roundMeta = rounds[currentRoundIndex];
+        const roundEndedBase = {
+          leaderboard,
+          correctAnswer: lobby.currentQuestion?.correctAnswer,
+          currentRound: currentRoundIndex,
+          currentRoundId,
+          roundName: roundMeta?.name || `Round ${currentRoundIndex + 1}`,
+          totalQuestionsInRound: totalQuestions,
+        };
+
+        this.io.to(lobbyId).emit("lobby-update", {
+          type: "round-ended",
+          data: roundEndedBase,
+        });
+
+        for (const s of roomSockets) {
+          const authSocket = s as unknown as AuthenticatedSocket;
+          if (!authSocket.user || authSocket.handshake.auth?.isHost) continue;
+          const uid = String(authSocket.user._id);
+          const playerSnap = lobby.players.find((p) => String(p.userId) === uid);
+          if (!playerSnap) continue;
+          const roundEntry = playerSnap.roundScores?.find(
+            (r) => r.roundId === currentRoundId,
+          );
+          s.emit("lobby-update", {
+            type: "round-ended",
+            data: {
+              ...roundEndedBase,
+              yourResult: {
+                answered: !!playerSnap.hasAnsweredCurrentQuestion,
+                isCorrect: playerSnap.lastAnswerCorrect,
+                lastAnswer: playerSnap.lastAnswer,
+                pointsEarned: playerSnap.lastPointsEarned ?? 0,
+                totalScore: playerSnap.score,
+                roundScore: roundEntry?.score ?? 0,
+              },
+            },
+          });
+        }
+      }
 
       console.log(
         `✅ Round ${currentRoundId} Progress Saved: Next Index ${nextIndex}`,
@@ -1734,15 +1815,18 @@ class TriviaSocket {
 
       console.log(`📨 Sent game-ended with ${rankedPlayers.length} players`);
 
-      // 4. Force Disconnect Players
-      const roomSockets = await this.io.in(lobbyId).fetchSockets();
-      for (const s of roomSockets) {
-        const authSocket = s as unknown as AuthenticatedSocket;
-        if (authSocket.user) {
-          this.userLobbyMap.delete(authSocket.user._id);
+      // 4. Let clients show final leaderboard, then disconnect players (not host)
+      setTimeout(async () => {
+        const roomSockets = await this.io.in(lobbyId).fetchSockets();
+        for (const s of roomSockets) {
+          const authSocket = s as unknown as AuthenticatedSocket;
+          if (authSocket.handshake.auth?.isHost === true) continue;
+          if (authSocket.user) {
+            this.userLobbyMap.delete(authSocket.user._id);
+          }
+          s.disconnect(true);
         }
-        s.disconnect(true);
-      }
+      }, 4000);
 
       // 5. WIPE PLAYERS FROM DB
       lobby.players = [];

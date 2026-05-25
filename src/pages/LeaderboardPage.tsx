@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Loader2, Home, RefreshCw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import dressingroom from "@/assets/dressingroom.webp"; // Using your same background
 
 interface Player {
@@ -21,10 +21,14 @@ interface Round {
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedRoundId, setSelectedRoundId] = useState<string>("overall");
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fromGameEnd, setFromGameEnd] = useState(
+    !!(location.state as { fromGameEnd?: boolean })?.fromGameEnd,
+  );
 
   const API_BASE = import.meta.env.VITE_API_URL;
 
@@ -82,16 +86,34 @@ export default function LeaderboardPage() {
     setIsLoading(true);
 
     try {
-      // SOURCE 1: Check if data was passed in navigation state (from Lobby.tsx)
-      const locationState =
-        (window.history.state && window.history.state.usr) || {};
+      const locationState = (location.state || {}) as {
+        leaderboard?: Player[];
+        gameSessionId?: string;
+        fromGameEnd?: boolean;
+      };
+
       if (
         locationState.leaderboard &&
         Array.isArray(locationState.leaderboard)
       ) {
-        console.log("Using leaderboard from navigation state");
         setLeaderboard(locationState.leaderboard);
+        setFromGameEnd(!!locationState.fromGameEnd);
+        setIsLoading(false);
         return;
+      }
+
+      const gameEndRaw = localStorage.getItem("gameEndData");
+      if (gameEndRaw) {
+        try {
+          const parsed = JSON.parse(gameEndRaw);
+          if (parsed.leaderboard?.length) {
+            setLeaderboard(parsed.leaderboard);
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
       }
 
       // SOURCE 2: Check for game session ID
@@ -175,7 +197,11 @@ export default function LeaderboardPage() {
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white uppercase leaguegothic">
             Final Standings
           </h1>
-          <p className="text-zinc-400 text-lg">Thank you for playing!</p>
+          <p className="text-zinc-400 text-lg">
+            {fromGameEnd
+              ? "The host ended the game — here are the final results."
+              : "Thank you for playing!"}
+          </p>
         </div>
 
         {/* Controls Card */}

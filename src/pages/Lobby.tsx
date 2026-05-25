@@ -85,6 +85,16 @@ const Lobby = () => {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const [roundResults, setRoundResults] = useState<{
+    roundName: string;
+    correctAnswer: string;
+    isCorrect?: boolean;
+    pointsEarned: number;
+    totalScore: number;
+    roundScore: number;
+    answered: boolean;
+    yourAnswer?: string;
+  } | null>(null);
   const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>(() => {
     try {
       const cached = sessionStorage.getItem("lobbyLiveLeaderboard");
@@ -97,8 +107,12 @@ const Lobby = () => {
   const userDataStr = localStorage.getItem("user");
   const userData = userDataStr ? JSON.parse(userDataStr) : {};
 
-  // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
-  const currentUserId = userData.id || userData.userId;
+  const currentUserId =
+    userData.user?.id ||
+    userData.user?._id ||
+    userData.user?.userId ||
+    userData.id ||
+    userData.userId;
 
   // Question timer: sync from server startTime (pre-question countdown uses socket events only)
   useEffect(() => {
@@ -290,6 +304,15 @@ const Lobby = () => {
       },
     );
 
+    socket.on("answer-submitted", (data: { success: boolean }) => {
+      if (!data.success) return;
+      toast({
+        title: "Answer submitted",
+        description: "Locked in. Results when the timer ends.",
+        duration: 4000,
+      });
+    });
+
     socket.on("lobby-update", (data: { type: string; data: any }) => {
       console.log("Lobby update:", data.type, data.data);
       handleLobbyUpdate(data.type, data.data);
@@ -333,6 +356,88 @@ const Lobby = () => {
   const syncLeaderboardFromPlayers = (players: LobbyUser[]) => {
     if (players.length > 0) {
       persistLeaderboard(playersToLeaderboard(players));
+    }
+  };
+
+  const showQuestionEndResults = (data: {
+    correctAnswer?: string;
+    roundName?: string;
+    currentRound?: number;
+    leaderboard?: Array<{
+      userId: string;
+      lastAnswerCorrect?: boolean;
+      lastAnswer?: string;
+      lastPointsEarned?: number;
+      score?: number;
+      roundScore?: number;
+      answered?: boolean;
+    }>;
+    yourResult?: {
+      answered: boolean;
+      isCorrect?: boolean;
+      lastAnswer?: string;
+      pointsEarned: number;
+      totalScore: number;
+      roundScore: number;
+    };
+  }) => {
+    if (data.leaderboard?.length) {
+      persistLeaderboard(data.leaderboard);
+    }
+
+    const correctAnswer = data.correctAnswer || "—";
+    const yr = data.yourResult;
+    const me = yr
+      ? null
+      : data.leaderboard?.find(
+          (p) => String(p.userId) === String(currentUserId),
+        );
+
+    const answered = yr?.answered ?? me?.answered;
+    const isCorrect = yr?.isCorrect ?? me?.lastAnswerCorrect;
+    const yourAnswer = yr?.lastAnswer ?? me?.lastAnswer;
+    const pointsEarned = yr?.pointsEarned ?? me?.lastPointsEarned ?? 0;
+    const totalScore = yr?.totalScore ?? me?.score ?? 0;
+    const roundScore = yr?.roundScore ?? me?.roundScore ?? 0;
+    const roundLabel =
+      data.roundName ||
+      currentRoundName ||
+      (data.currentRound !== undefined
+        ? `Round ${data.currentRound + 1}`
+        : "Round");
+
+    setRoundResults({
+      roundName: roundLabel,
+      correctAnswer,
+      isCorrect,
+      pointsEarned,
+      totalScore,
+      roundScore,
+      answered: !!answered,
+      yourAnswer,
+    });
+
+    if (answered) {
+      if (isCorrect) {
+        toast({
+          title: "Correct!",
+          description: `+${pointsEarned} pts. Total: ${totalScore}. Answer: ${correctAnswer}`,
+          duration: 9000,
+        });
+      } else {
+        toast({
+          title: "Wrong",
+          description: `Correct: ${correctAnswer}. You chose: ${yourAnswer || "—"}. Total: ${totalScore}`,
+          variant: "destructive",
+          duration: 9000,
+        });
+      }
+    } else {
+      toast({
+        title: "Time's up",
+        description: `You didn't answer. Correct: ${correctAnswer}. Total: ${totalScore}`,
+        duration: 9000,
+      });
     }
   };
 
@@ -464,6 +569,7 @@ const Lobby = () => {
         break;
 
       case "question-started":
+        setRoundResults(null);
         setLobbyStatus("active");
         setCurrentQuestion(data.question);
         setCurrentQuestionIndex(data.questionIndex);
@@ -484,9 +590,8 @@ const Lobby = () => {
         });
         break;
 
-      case "question-ended":
+      case "question-ended": {
         questionStartTimeRef.current = null;
-
         setLobbyStatus("waiting");
         setCurrentQuestion(null);
         setHasAnswered(false);
@@ -511,25 +616,32 @@ const Lobby = () => {
           setIsRoundOver(data.isRoundOver);
         }
 
-        toast({
-          title: "Question Ended",
-          description: data.correctAnswer
-            ? `Correct answer: ${data.correctAnswer}`
-            : "See the leaderboard for updated scores.",
-          duration: 8000,
-        });
+        showQuestionEndResults(data);
 
         if (data.isRoundOver) {
           toast({
             title: "Round complete",
-            description: "Waiting for the host to start the next round.",
-            duration: 10000,
+            description: "That was the last question in this round. Waiting for the host.",
+            duration: 8000,
           });
+        }
+        break;
+      }
+
+      case "round-ended":
+        if (data.leaderboard?.length) {
+          persistLeaderboard(data.leaderboard);
+        }
+        setIsRoundOver(true);
+        if (data.roundName) setCurrentRoundName(data.roundName);
+        if (data.currentRound !== undefined) {
+          setCurrentRound(data.currentRound);
         }
         break;
 
       case "round-changed":
         questionStartTimeRef.current = null;
+        setRoundResults(null);
         setCurrentRound(data.roundIndex);
         setCurrentQuestionIndex(0);
         setNextQuestionIndex(1);
@@ -545,7 +657,7 @@ const Lobby = () => {
         });
         break;
 
-      case "game-ended":
+      case "game-ended": {
         questionStartTimeRef.current = null;
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
@@ -557,22 +669,47 @@ const Lobby = () => {
         setCurrentQuestion(null);
         setHasAnswered(false);
 
-        if (data.leaderboard?.length) {
-          persistLeaderboard(data.leaderboard);
-        } else {
-          setLiveLeaderboard([]);
-          sessionStorage.removeItem("lobbyLiveLeaderboard");
+        const finalBoard = data.leaderboard || [];
+        if (finalBoard.length) {
+          persistLeaderboard(finalBoard);
+          try {
+            localStorage.setItem(
+              "gameEndData",
+              JSON.stringify({
+                leaderboard: finalBoard,
+                gameSessionId: data.gameSessionId,
+                lobbyName: data.lobbyName,
+                timestamp: Date.now(),
+              }),
+            );
+            if (data.gameSessionId) {
+              localStorage.setItem("lastGameSessionId", data.gameSessionId);
+            }
+          } catch {
+            /* ignore */
+          }
         }
 
-        const winner = data.leaderboard?.[0];
+        const winner = finalBoard[0];
         toast({
-          title: "Game Over!",
+          title: "Game ended",
           description: winner
-            ? `${winner.name} wins with ${winner.score} points`
-            : "The game has ended.",
-          duration: 10000,
+            ? `${winner.name} wins with ${winner.score} points! Opening final leaderboard…`
+            : "The game has ended. Opening final leaderboard…",
+          duration: 6000,
         });
+
+        setTimeout(() => {
+          navigate("/leaderboard", {
+            state: {
+              leaderboard: finalBoard,
+              gameSessionId: data.gameSessionId,
+              fromGameEnd: true,
+            },
+          });
+        }, 1500);
         break;
+      }
 
       // Stream control disabled
       // case "stream-control":
@@ -1065,6 +1202,80 @@ const Lobby = () => {
           </Button>
         </div>
       </div>
+      {roundResults && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl glassmorphism-medium border border-white/20 p-6 text-white shadow-2xl">
+            <h2 className="leaguegothic text-3xl uppercase italic mb-1">
+              Time's up!
+            </h2>
+            <p className="text-white/60 text-sm mb-6">
+              {roundResults.roundName} — question results
+            </p>
+
+            <div
+              className={`rounded-xl p-4 mb-4 border ${
+                roundResults.answered && roundResults.isCorrect
+                  ? "bg-green-500/15 border-green-500/40"
+                  : roundResults.answered
+                    ? "bg-red-500/15 border-red-500/40"
+                    : "bg-white/5 border-white/10"
+              }`}
+            >
+              {roundResults.answered ? (
+                <>
+                  <p className="text-xl font-bold mb-2">
+                    {roundResults.isCorrect ? "You got it right!" : "Wrong answer"}
+                  </p>
+                  <p className="text-sm text-white/80">
+                    Correct answer:{" "}
+                    <span className="font-semibold text-white">
+                      {roundResults.correctAnswer}
+                    </span>
+                  </p>
+                  {!roundResults.isCorrect && roundResults.yourAnswer && (
+                    <p className="text-sm text-white/60 mt-1">
+                      You chose: {roundResults.yourAnswer}
+                    </p>
+                  )}
+                  {roundResults.isCorrect && (
+                    <p className="text-sm text-green-300 mt-2">
+                      +{roundResults.pointsEarned} pts (last question)
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-bold mb-2">No answer submitted</p>
+                  <p className="text-sm text-white/80">
+                    Correct answer: {roundResults.correctAnswer}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-6 text-center">
+              <div className="rounded-lg bg-white/5 p-3 border border-white/10">
+                <p className="text-[10px] uppercase text-white/50">Round score</p>
+                <p className="text-2xl font-bold text-orange-400">
+                  {roundResults.roundScore}
+                </p>
+              </div>
+              <div className="rounded-lg bg-white/5 p-3 border border-white/10">
+                <p className="text-[10px] uppercase text-white/50">Total score</p>
+                <p className="text-2xl font-bold">{roundResults.totalScore}</p>
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              onClick={() => setRoundResults(null)}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      )}
+
       {lobbyStatus === "countdown" && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
           {/* Background Glow matching your gradient */}

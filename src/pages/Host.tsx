@@ -605,7 +605,7 @@ const Host = () => {
         setCountdown(data.countdown);
         break;
 
-      case "game-ended":
+      case "game-ended": {
         questionStartTimeRef.current = null;
         setGameStatus("waiting");
         setCurrentQuestion(0);
@@ -614,15 +614,20 @@ const Host = () => {
         setCurrentQuestionData(null);
         setCountdown(0);
         setLastQuestionAnalytics(null);
-        clearLeaderboardLocal();
-        const top = data.leaderboard?.[0];
+        const finalBoard = data.leaderboard || [];
+        if (finalBoard.length) {
+          setLiveLeaderboard(finalBoard);
+        }
+        const top = finalBoard[0];
         toast({
-          title: "Game Completed!",
+          title: "Game ended",
           description: top
-            ? `${top.name} wins with ${top.score} points`
-            : "The game has ended.",
+            ? `${top.name} wins with ${top.score} points. Players are being sent to the final leaderboard.`
+            : "Game ended. Players are being sent to the final leaderboard.",
+          duration: 8000,
         });
         break;
+      }
 
       case "leaderboard-cleared":
         if (data.leaderboard) {

@@ -39,6 +39,7 @@ export interface ILobby extends Document {
     lastAnswerTime?: Date;
     lastAnswerCorrect?: boolean;
     lastAnswer?: string;
+    lastPointsEarned?: number;
   }>;
   roundProgress: Array<{
     roundId: string;
@@ -107,6 +108,7 @@ const LobbySchema = new Schema(
         lastAnswerTime: { type: Date },
         lastAnswerCorrect: { type: Boolean },
         lastAnswer: { type: String },
+        lastPointsEarned: { type: Number, default: 0 },
       },
     ],
 
