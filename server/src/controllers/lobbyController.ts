@@ -50,8 +50,6 @@ export const getLeaderboard = async (req: Request, res: Response) => {
   try {
     const { lobbyId } = req.params;
     const { type, roundId } = req.query;
-    const limit = parseInt(req.query.limit as string) || 10;
-
     const authHeader = req.headers.authorization as string | undefined;
     const token = authHeader?.replace("Bearer ", "");
 
@@ -86,7 +84,11 @@ export const getLeaderboard = async (req: Request, res: Response) => {
       sortedPlayers.sort((a, b) => (b.score || 0) - (a.score || 0));
     }
 
-    const leaderboard = sortedPlayers.slice(0, limit).map((player, index) => {
+    const limitParam = req.query.limit as string | undefined;
+    const limit = limitParam ? parseInt(limitParam, 10) : sortedPlayers.length;
+    const effectiveLimit =
+      limit > 0 ? Math.min(limit, sortedPlayers.length) : sortedPlayers.length;
+    const leaderboard = sortedPlayers.slice(0, effectiveLimit).map((player, index) => {
       // Find round score if requested
       const roundEntry =
         type === "round" && roundId && player.roundScores
