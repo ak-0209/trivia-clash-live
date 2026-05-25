@@ -18,7 +18,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import StreamView from "@/components/StreamView";
+// import StreamView from "@/components/StreamView";
 import { io, Socket } from "socket.io-client";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,6 +51,8 @@ export function joinUrl(base: string, path: string) {
 const Host = () => {
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
+  const questionStartTimeRef = useRef<number | null>(null);
+  const questionTimeLimitRef = useRef(30);
 
   const [gameStatus, setGameStatus] = useState<
     "waiting" | "countdown" | "active" | "paused" | "results"
@@ -74,11 +76,12 @@ const Host = () => {
   const [showStartModal, setShowStartModal] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(10);
   const [isConnected, setIsConnected] = useState(false);
-  const [isStreamMuted, setIsStreamMuted] = useState(false);
-  const [currentStreamUrl, setCurrentStreamUrl] = useState(
-    import.meta.env.VITE_YOUTUBE_STREAM_URL ||
-      "https://www.youtube.com/embed/YDvsBbKfLPA",
-  );
+  // Stream disabled — no longer used
+  // const [isStreamMuted, setIsStreamMuted] = useState(false);
+  // const [currentStreamUrl, setCurrentStreamUrl] = useState(
+  //   import.meta.env.VITE_YOUTUBE_STREAM_URL ||
+  //     "https://www.youtube.com/embed/YDvsBbKfLPA",
+  // );
   const [roundsLoaded, setRoundsLoaded] = useState(false);
   const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>([]);
 
@@ -96,6 +99,22 @@ const Host = () => {
   const isHostPanel = !!localStorage.getItem("hostJwtToken");
 
   const API_BASE = import.meta.env.VITE_API_URL;
+
+  useEffect(() => {
+    if (gameStatus !== "active" || !questionStartTimeRef.current) return;
+
+    const tick = () => {
+      const start = questionStartTimeRef.current;
+      if (!start) return;
+      const limit = questionTimeLimitRef.current;
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      setCountdown(Math.max(0, limit - elapsed));
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [gameStatus, currentQuestionData?.id]);
 
   // Connect to WebSocket and restore state
   useEffect(() => {
@@ -162,9 +181,9 @@ const Host = () => {
           totalQuestionsInRound,
         } = data;
 
-        if (lobby && lobby.streamUrl) {
-          setCurrentStreamUrl(lobby.streamUrl);
-        }
+        // if (lobby && lobby.streamUrl) {
+        //   setCurrentStreamUrl(lobby.streamUrl);
+        // }
 
         if (totalRounds) {
           setTotalRounds(totalRounds);
@@ -189,6 +208,20 @@ const Host = () => {
           setTotalQuestions(totalQuestions);
         }
 
+        if (lobby?.players?.length) {
+          const lb = [...lobby.players]
+            .sort((a: { score?: number }, b: { score?: number }) =>
+              (b.score || 0) - (a.score || 0),
+            )
+            .map((p: { userId: string; name: string; score?: number }, i: number) => ({
+              rank: i + 1,
+              userId: p.userId,
+              name: p.name,
+              score: p.score || 0,
+            }));
+          setLiveLeaderboard(lb);
+        }
+
         // Always restore game state from server
         if (lobby) {
           setPlayerCount(lobby.playerCount || 0);
@@ -211,31 +244,39 @@ const Host = () => {
           } else if (lobby.status === "in-progress") {
             setGameStatus("active");
 
-            // Use actual remaining time from server, not full time
-            if (remainingTime && remainingTime > 0) {
-              setCountdown(remainingTime);
-              console.log(
-                `⏰ Restored actual remaining time: ${remainingTime}s`,
-              );
+            const timeLimit = lobby.currentQuestion?.timeLimit || 30;
+            questionTimeLimitRef.current = timeLimit;
 
-              toast({
-                title: "Timer Continued",
-                description: `Question timer kept running: ${remainingTime}s remaining`,
-              });
+            if (lobby.startTime) {
+              const startMs = new Date(lobby.startTime).getTime();
+              questionStartTimeRef.current = startMs;
+              const elapsed = Math.floor((Date.now() - startMs) / 1000);
+              const remaining = Math.max(0, timeLimit - elapsed);
+              setCountdown(remaining);
+              if (remaining > 0) {
+                toast({
+                  title: "Timer Continued",
+                  description: `${remaining}s remaining on this question`,
+                });
+              }
+            } else if (remainingTime && remainingTime > 0) {
+              setCountdown(remainingTime);
+              questionStartTimeRef.current =
+                Date.now() - (timeLimit - remainingTime) * 1000;
             } else if (lobby.currentQuestion) {
-              // Fallback to full time limit if no remaining time
-              setCountdown(lobby.currentQuestion.timeLimit || 30);
+              setCountdown(timeLimit);
+              questionStartTimeRef.current = Date.now();
             }
           } else {
             setGameStatus("waiting");
           }
 
           // Show toast for state restoration
-          if (wasGameInProgress) {
+          if (wasGameInProgress && currentRound >= 0) {
             toast({
               title: "Game State Restored",
-              description: `Resumed from round ${currentRound || 0}, question ${
-                lobby.currentQuestionIndex || 0
+              description: `Resumed from Round ${currentRound + 1}, question ${
+                lobby.currentQuestionIndex || 1
               }`,
             });
           }
@@ -245,15 +286,6 @@ const Host = () => {
 
     socket.on("lobby-update", (data: { type: string; data: any }) => {
       console.log("Host received update:", data.type, data.data);
-
-      // Add stream control updates
-      if (data.type === "stream-control") {
-        if (data.data.action === "mute") {
-          setIsStreamMuted(data.data.value);
-        } else if (data.data.action === "change_url") {
-          setCurrentStreamUrl(data.data.value);
-        }
-      }
 
       handleHostUpdate(data.type, data.data);
     });
@@ -266,6 +298,37 @@ const Host = () => {
       socket.disconnect();
     };
   }, [toast]);
+
+  const clearLeaderboardOnServer = (resetProgress = true) => {
+    if (!socketRef.current) return;
+    socketRef.current.emit("host-clear-leaderboard", {
+      lobbyId: "main-lobby",
+      resetProgress,
+    });
+  };
+
+  const clearLeaderboardLocal = () => {
+    setLiveLeaderboard([]);
+    try {
+      sessionStorage.removeItem("lobbyLiveLeaderboard");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleClearLeaderboard = () => {
+    clearLeaderboardLocal();
+    clearLeaderboardOnServer(true);
+    setGameStarted(false);
+    setCurrentRound(-1);
+    setCurrentQuestion(0);
+    setCurrentQuestionData(null);
+    setLastQuestionAnalytics(null);
+    toast({
+      title: "Leaderboard cleared",
+      description: "All scores reset. Safe to start a new game.",
+    });
+  };
 
   const startFirstRound = async () => {
     return new Promise<void>((resolve, reject) => {
@@ -298,15 +361,17 @@ const Host = () => {
         return;
       }
 
-      // Don't close modal here - just set the game state
+      // Reset scores before a new game (DB + all clients)
+      clearLeaderboardOnServer(true);
+      clearLeaderboardLocal();
+
       setGameStarted(true);
-      setCurrentRound(0); // First round is index 0
+      setCurrentRound(0);
       setCurrentQuestion(0);
       setTotalRounds(rounds.length);
 
       const firstRound = rounds[0];
 
-      // Notify server to activate first round
       socketRef.current.emit("host-change-round", {
         lobbyId: "main-lobby",
         roundId: firstRound.id,
@@ -452,7 +517,9 @@ const Host = () => {
         break;
 
       case "score-updated":
-        // Update stats if needed
+        if (data.leaderboard?.length) {
+          setLiveLeaderboard(data.leaderboard);
+        }
         break;
 
       // Add answered count handler
@@ -473,13 +540,12 @@ const Host = () => {
         setCurrentQuestion(data.questionIndex);
         setAnsweredCount(0);
 
-        if (data.startTime) {
-          const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
-          const remaining = Math.max(0, (data.timeLimit || 30) - elapsed);
-          setCountdown(remaining);
-        } else {
-          setCountdown(data.timeLimit || 30);
-        }
+        const timeLimit = data.timeLimit || data.question?.timeLimit || 30;
+        questionTimeLimitRef.current = timeLimit;
+        const startMs = data.startTime || Date.now();
+        questionStartTimeRef.current = startMs;
+        const elapsed = Math.floor((Date.now() - startMs) / 1000);
+        setCountdown(Math.max(0, timeLimit - elapsed));
 
         toast({
           title: "Question Started!",
@@ -488,6 +554,7 @@ const Host = () => {
         break;
 
       case "question-ended":
+        questionStartTimeRef.current = null;
         setGameStatus("waiting");
         setCountdown(0);
 
@@ -518,12 +585,13 @@ const Host = () => {
           });
         }
 
-        if (data.leaderboard) {
+        if (data.leaderboard?.length) {
           setLiveLeaderboard(data.leaderboard);
         }
         break;
 
       case "countdown-started":
+        questionStartTimeRef.current = null;
         setGameStatus("countdown");
         setCountdown(data.countdown);
         setCurrentQuestion(data.questionIndex);
@@ -538,40 +606,56 @@ const Host = () => {
         break;
 
       case "game-ended":
+        questionStartTimeRef.current = null;
         setGameStatus("waiting");
         setCurrentQuestion(0);
         setCurrentRound(-1);
         setGameStarted(false);
         setCurrentQuestionData(null);
         setCountdown(0);
-        setLastQuestionAnalytics(null); // Clear analytics on game end
+        setLastQuestionAnalytics(null);
+        clearLeaderboardLocal();
+        const top = data.leaderboard?.[0];
         toast({
           title: "Game Completed!",
-          description: "The game has ended. Final results are available.",
+          description: top
+            ? `${top.name} wins with ${top.score} points`
+            : "The game has ended.",
         });
+        break;
+
+      case "leaderboard-cleared":
+        if (data.leaderboard) {
+          setLiveLeaderboard(data.leaderboard);
+        } else {
+          clearLeaderboardLocal();
+        }
+        try {
+          sessionStorage.removeItem("lobbyLiveLeaderboard");
+        } catch {
+          /* ignore */
+        }
         break;
 
       case "lobby-reset":
         setGameStatus("waiting");
         setCurrentQuestion(0);
-        setCurrentRound(0);
+        setCurrentRound(-1);
         setCurrentQuestionData(null);
         setPlayerCount(0);
         setCountdown(0);
-        setLastQuestionAnalytics(null); // Clear analytics on reset
+        setGameStarted(false);
+        setLastQuestionAnalytics(null);
+        clearLeaderboardLocal();
         toast({
           title: "Lobby Reset",
           description: "Lobby has been reset and is ready for a new game",
         });
         break;
 
-      case "stream-control":
-        if (data.action === "mute") {
-          setIsStreamMuted(data.value);
-        } else if (data.action === "change_url") {
-          setCurrentStreamUrl(data.value);
-        }
-        break;
+      // Stream control disabled
+      // case "stream-control":
+      //   break;
 
       case "round-changed":
         setCurrentRound(data.roundIndex);
@@ -878,9 +962,10 @@ const Host = () => {
     setPlayerCount(0);
     setCurrentQuestionData(null);
     setCountdown(0);
-    setGameStarted(false); // Make sure this is false
+    setGameStarted(false);
     setAnsweredCount(0);
-    setShowEndGameModal(false); // Close the modal
+    setShowEndGameModal(false);
+    clearLeaderboardLocal();
 
     toast({
       title: "Game Ended",
@@ -888,41 +973,9 @@ const Host = () => {
     });
   };
 
-  const handleStreamMuteToggle = (muted: boolean) => {
-    if (!socketRef.current) return;
-
-    setIsStreamMuted(muted);
-
-    // Broadcast mute state to all players
-    socketRef.current.emit("host-stream-control", {
-      lobbyId: "main-lobby",
-      action: "mute",
-      value: muted,
-    });
-
-    toast({
-      title: muted ? "Stream Muted" : "Stream Unmuted",
-      description: `All players ${muted ? "muted" : "unmuted"}`,
-    });
-  };
-
-  const handleStreamUrlChange = (url: string) => {
-    if (!socketRef.current) return;
-
-    setCurrentStreamUrl(url);
-
-    // Broadcast new stream URL to all players
-    socketRef.current.emit("host-stream-control", {
-      lobbyId: "main-lobby",
-      action: "change_url",
-      value: url,
-    });
-
-    toast({
-      title: "Stream Updated",
-      description: "All players will see the new live stream",
-    });
-  };
+  // Stream controls disabled
+  // const handleStreamMuteToggle = (muted: boolean) => { ... };
+  // const handleStreamUrlChange = (url: string) => { ... };
 
   // Determine if start button should be enabled
   const canStartQuestion = gameStatus === "waiting" || gameStatus === "results";
@@ -950,7 +1003,8 @@ const Host = () => {
         isOpen={showLeaderboard}
         onClose={() => setShowLeaderboard(false)}
         rounds={rounds}
-        currentRoundIndex={currentRound}
+        currentRoundIndex={Math.max(0, currentRound)}
+        liveLeaderboard={liveLeaderboard}
       />
       <div className="hostpanel-wrapper">
         <div className="hostpanel-header-left flex items-center justify-between">
@@ -989,32 +1043,48 @@ const Host = () => {
                 </span>
               )}
             </div> */}
-            <div
-              className={`
-                flex items-center gap-3 px-5 py-2 rounded-full glassmorphism-medium
-                ${
-                  isConnected
-                    ? "border-green-500 text-green-500"
-                    : "border-red-500 text-red-500"
-                }
-              `}
-            >
-              {/* Status Dot */}
-              <span
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {(gameStatus === "active" || gameStatus === "countdown") && (
+                <div
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full glassmorphism-medium border ${
+                    gameStatus === "active"
+                      ? "border-orange-500/50 text-orange-400"
+                      : "border-yellow-500/50 text-yellow-300"
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    {gameStatus === "countdown" ? "Starts in" : "Time left"}
+                  </span>
+                  <span className="text-2xl font-black tabular-nums leading-none">
+                    {countdown}s
+                  </span>
+                </div>
+              )}
+              <div
                 className={`
-                  w-3 h-3 rounded-full
+                  flex items-center gap-3 px-5 py-2 rounded-full glassmorphism-medium
                   ${
                     isConnected
-                      ? "bg-green-500 shadow-[0_0_8px_#22c55e]"
-                      : "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                      ? "border-green-500 text-green-500"
+                      : "border-red-500 text-red-500"
                   }
                 `}
-              />
-
-              {/* Status Text */}
-              <span className="text-sm font-semibold tracking-wide">
-                {isConnected ? "Connected" : "Disconnected"}
-              </span>
+              >
+                <span
+                  className={`
+                    w-3 h-3 rounded-full
+                    ${
+                      isConnected
+                        ? "bg-green-500 shadow-[0_0_8px_#22c55e]"
+                        : "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                    }
+                  `}
+                />
+                <span className="text-sm font-semibold tracking-wide">
+                  {isConnected ? "Connected" : "Disconnected"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1022,53 +1092,15 @@ const Host = () => {
         <div className="hostpanel-grid">
           {/* LEFT COLUMN */}
           <div className="left-column">
+            {/* Live stream + controls removed — no longer used
             <StreamView
               youtubeUrl={currentStreamUrl}
               isMuted={isStreamMuted}
               onMuteToggle={handleStreamMuteToggle}
               isHost={true}
             />
-
-            <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
-              {/* Header remains consistent with your brand */}
-              <div className="px-6 py-4 border-b border-white/30 bg-white/5">
-                <h2 className="text-4xl italic uppercase leaguegothic tracking-wide">
-                  Stream Controls
-                </h2>
-              </div>
-
-              <div className="px-6 py-4">
-                <h3 className="text-lg font-semibold mb-3">Stream Source</h3>
-                <div className="space-y-3">
-                  <Input
-                    type="text"
-                    value={currentStreamUrl}
-                    onChange={(e) => setCurrentStreamUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/embed/YOUR_LIVE_STREAM_ID"
-                    className="font-mono text-sm"
-                  />
-                  <button
-                    onClick={() => handleStreamUrlChange(currentStreamUrl)}
-                    className="group relative inline-flex items-center justify-between min-w-[160px] p-[1.5px] overflow-hidden rounded-full transition-all hover:scale-[1.02] active:scale-95 shadow-lg"
-                  >
-                    {/* The Gradient Border Layer */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-
-                    {/* The Inner Content Area */}
-                    <div className="relative flex items-center justify-between w-full bg-[#121212] rounded-full px-4 py-2 transition-colors group-hover:bg-[#1a1a1a]">
-                      <span className="text-white text-xs font-bold tracking-widest uppercase">
-                        Update
-                      </span>
-
-                      <ArrowUpRight
-                        size={14}
-                        className="text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                      />
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </Card>
+            <Card>...</Card>
+            */}
 
             {/* <Card className="glassmorphism-medium flex flex-col border border-white/30 overflow-hidden">
               <div className="px-6 py-4 border-b border-white/30 bg-white/5">
@@ -1170,8 +1202,13 @@ const Host = () => {
                       </div>
                     ))}
                   </div>
-                  <div className="question-meta">
-                    <span>Time: {currentQuestionData.timeLimit}s</span>
+                  <div className="question-meta flex flex-wrap gap-4 items-center">
+                    {gameStatus === "active" && (
+                      <span className="text-lg font-bold text-orange-400">
+                        ⏱ {countdown}s remaining
+                      </span>
+                    )}
+                    <span>Limit: {currentQuestionData.timeLimit}s</span>
                     <span>Points: {currentQuestionData.points}</span>
                   </div>
                 </div>
@@ -1287,6 +1324,18 @@ const Host = () => {
                   </div>
                 </div>
 
+                {currentRound < 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleClearLeaderboard}
+                    className="w-full border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+                  >
+                    <Trophy className="w-4 h-4 mr-2 opacity-70" />
+                    Clear leaderboard (new game)
+                  </Button>
+                )}
+
                 {/* Action Buttons Section */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1397,11 +1446,26 @@ const Host = () => {
             {lastQuestionAnalytics && (
               <QuestionAnalyticsSummary analytics={lastQuestionAnalytics} />
             )}
-            <LeaderboardCard
-              currentRoundIndex={0}
-              isHost={true}
-              liveLeaderboard={liveLeaderboard}
-            />
+            <div className="space-y-2">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLeaderboard(true)}
+                  className="text-white border-white/20"
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Full leaderboard ({liveLeaderboard.length})
+                </Button>
+              </div>
+              <LeaderboardCard
+                currentRoundIndex={Math.max(0, currentRound)}
+                rounds={rounds}
+                isHost={true}
+                liveLeaderboard={liveLeaderboard}
+              />
+            </div>
           </div>
         </div>
 

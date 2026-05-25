@@ -65,45 +65,52 @@ export function LeaderboardCard({
     fetchRounds();
   }, [API_BASE, propRounds]);
 
+  const fetchLeaderboard = async () => {
+    setIsLoading(true);
+    try {
+      const userDataStr = localStorage.getItem("user");
+      const userData = userDataStr ? JSON.parse(userDataStr) : {};
+      const token =
+        localStorage.getItem("hostJwtToken") ||
+        localStorage.getItem("jwtToken") ||
+        userData.token;
+
+      let url = `${API_BASE}/lobbies/main-lobby/leaderboard`;
+      const params = new URLSearchParams();
+      if (selectedRoundId !== "overall") {
+        params.set("type", "round");
+        params.set("roundId", selectedRoundId);
+      }
+      const qs = params.toString();
+      if (qs) url += `?${qs}`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboard(data.leaderboard || []);
+      }
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (liveLeaderboard && liveLeaderboard.length > 0) {
+    if (
+      selectedRoundId === "overall" &&
+      liveLeaderboard &&
+      liveLeaderboard.length > 0
+    ) {
       setLeaderboard(liveLeaderboard);
       setIsLoading(false);
       return;
     }
-
-    const fetchLeaderboard = async () => {
-      setIsLoading(true);
-      try {
-        const userDataStr = localStorage.getItem("user");
-        const userData = userDataStr ? JSON.parse(userDataStr) : {};
-        const token =
-          localStorage.getItem("hostJwtToken") ||
-          localStorage.getItem("jwtToken") ||
-          userData.token;
-
-        let url = `${API_BASE}/lobbies/main-lobby/leaderboard`;
-        if (selectedRoundId !== "overall") {
-          url += `?type=round&roundId=${selectedRoundId}`;
-        }
-
-        const response = await fetch(url, {
-          headers: { Authorization: token ? `Bearer ${token}` : "" },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setLeaderboard(data.leaderboard || []);
-        }
-      } catch (error) {
-        console.error("Error fetching leaderboard:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchLeaderboard();
-  }, [liveLeaderboard, selectedRoundId, currentRoundIndex, API_BASE]);
+  }, [selectedRoundId, currentRoundIndex, API_BASE, liveLeaderboard]);
 
   const getRankStyles = (index: number) => {
     if (index === 0)
@@ -115,22 +122,10 @@ export function LeaderboardCard({
     return "bg-zinc-800 text-zinc-400 border border-zinc-700";
   };
 
-  const getDisplayPlayers = () => {
-    const top5 = leaderboard.slice(0, 5);
-    if (isHost || !currentUserId) return top5;
+  const displayPlayers = leaderboard;
 
-    const userRankIndex = leaderboard.findIndex(
-      (p) => p.userId === currentUserId,
-    );
-
-    if (userRankIndex >= 5) {
-      return [...top5, leaderboard[userRankIndex]];
-    }
-
-    return top5;
-  };
-
-  const displayPlayers = getDisplayPlayers();
+  const isCurrentUser = (player: Player) =>
+    String(player.userId) === String(currentUserId);
 
   return (
     <Card className="glassmorphism-medium p-6 flex flex-col gap-4 border-white/10">
@@ -176,7 +171,7 @@ export function LeaderboardCard({
       </div>
 
       {/* Player List */}
-      <div className="space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+      <div className="space-y-2 min-h-[200px] max-h-[min(60vh,520px)] overflow-y-auto pr-1 custom-scrollbar">
         {isLoading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="animate-spin text-white/20" />
@@ -188,58 +183,44 @@ export function LeaderboardCard({
         ) : (
           <div className="flex flex-col gap-2">
             {displayPlayers.map((player, index) => {
-              const actualRankIndex = leaderboard.findIndex(
-                (p) => p.userId === player.userId,
-              );
-              const isCurrentUser = player.userId === currentUserId;
-              const isJumpedRank =
-                !isHost && index === 5 && actualRankIndex >= 5;
+              const you = isCurrentUser(player);
 
               return (
-                <div key={player.userId}>
-                  {isJumpedRank && (
-                    <div className="flex justify-center py-1 opacity-20">
-                      <span className="text-[10px] font-bold tracking-widest text-white">
-                        ••••
-                      </span>
+                <div
+                  key={player.userId}
+                  className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${
+                    you
+                      ? "bg-white/10 border-white/30 shadow-lg"
+                      : "bg-black/40 border-white/5"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-bold text-[10px] ${getRankStyles(
+                        index,
+                      )}`}
+                    >
+                      {index + 1}
                     </div>
-                  )}
-
-                  <div
-                    className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${
-                      isCurrentUser
-                        ? "bg-white/10 border-white/30 shadow-lg"
-                        : "bg-black/40 border-white/5"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-6 w-6 items-center justify-center rounded-full font-bold text-[10px] ${getRankStyles(
-                          actualRankIndex,
-                        )}`}
-                      >
-                        {actualRankIndex + 1}
-                      </div>
-                      <span
-                        className={`font-medium text-sm truncate max-w-[120px] ${
-                          isCurrentUser ? "text-yellow-400" : "text-white"
-                        }`}
-                      >
-                        {player.name}{" "}
-                        {isCurrentUser && (
-                          <span className="text-[10px] opacity-60 ml-1">
-                            (YOU)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <span className="text-sm font-bold text-white">
-                      {selectedRoundId === "overall"
-                        ? player.score
-                        : player.roundScore}{" "}
-                      pts
+                    <span
+                      className={`font-medium text-sm truncate ${
+                        you ? "text-yellow-400" : "text-white"
+                      }`}
+                    >
+                      {player.name}
+                      {you && (
+                        <span className="text-[10px] opacity-60 ml-1">
+                          (YOU)
+                        </span>
+                      )}
                     </span>
                   </div>
+                  <span className="text-sm font-bold text-white shrink-0 ml-2">
+                    {selectedRoundId === "overall"
+                      ? player.score
+                      : (player.roundScore ?? 0)}{" "}
+                    pts
+                  </span>
                 </div>
               );
             })}

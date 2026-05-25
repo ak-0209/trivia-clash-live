@@ -328,20 +328,21 @@ class TriviaSocket {
         return;
       }
 
-      const updatedLobby = await this.updateLobby(lobbyId, {
-        status: "in-progress",
-        gameState: "question",
-        currentQuestion: question,
-        currentQuestionIndex: questionIndex,
-      });
-
-      if (!updatedLobby) return;
-
       // Ensure time limit is from server question data
       const timeLimit = question.timeLimit || 30;
 
       // CRITICAL: Store start time and time limit for independent timer
       const startTime = Date.now();
+
+      const updatedLobby = await this.updateLobby(lobbyId, {
+        status: "in-progress",
+        gameState: "question",
+        currentQuestion: question,
+        currentQuestionIndex: questionIndex,
+        startTime: new Date(startTime),
+      });
+
+      if (!updatedLobby) return;
       this.questionStartTimes.set(lobbyId, startTime);
       this.questionTimeLimits.set(lobbyId, timeLimit);
 
@@ -576,6 +577,68 @@ class TriviaSocket {
       console.error("Error resetting lobby:", error);
     }
   }
+
+  private async handleHostClearLeaderboard(
+    socket: AuthenticatedSocket,
+    data: { lobbyId: string; resetProgress?: boolean },
+  ) {
+    const { lobbyId, resetProgress = true } = data;
+    const lobby = await this.getLobby(lobbyId);
+    if (!lobby) return;
+
+    this.clearLobbyTimers(lobbyId);
+
+    const resetPlayers = lobby.players.map((p) => ({
+      userId: p.userId,
+      name: p.name,
+      email: p.email,
+      score: 0,
+      roundScores: [],
+      joinedAt: p.joinedAt,
+      socketId: p.socketId,
+      hasAnsweredCurrentQuestion: false,
+      lastAnswerTime: undefined,
+      lastAnswerCorrect: undefined,
+      lastAnswer: undefined,
+    }));
+
+    const updatedLobby = await this.updateLobby(lobbyId, {
+      players: resetPlayers,
+      currentRound: -1,
+      currentQuestion: null,
+      currentQuestionIndex: 0,
+      totalQuestionsInRound: 0,
+      status: "waiting",
+      gameState: "lobby",
+      startTime: undefined,
+      roundProgress: resetProgress ? [] : lobby.roundProgress,
+    });
+
+    if (!updatedLobby) return;
+
+    this.currentRounds.set(lobbyId, -1);
+    this.currentRoundIds.delete(lobbyId);
+
+    const leaderboard = [...resetPlayers]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p, index) => ({
+        rank: index + 1,
+        userId: p.userId,
+        name: p.name,
+        score: 0,
+        roundScore: 0,
+      }));
+
+    this.io.to(lobbyId).emit("lobby-update", {
+      type: "leaderboard-cleared",
+      data: {
+        leaderboard,
+        message: "Leaderboard cleared — scores reset for a new game",
+      },
+    });
+
+    console.log(`🧹 Leaderboard cleared for lobby ${lobbyId}`);
+  }
   // Handle connection with host identification
   private handleConnection(socket: AuthenticatedSocket) {
     console.log(
@@ -652,11 +715,19 @@ class TriviaSocket {
     );
 
     socket.on(
-      "host-stream-control",
-      (data: { lobbyId: string; action: string; value: any }) => {
-        this.handleHostStreamControl(socket, data);
+      "host-clear-leaderboard",
+      (data: { lobbyId: string; resetProgress?: boolean }) => {
+        this.handleHostClearLeaderboard(socket, data);
       },
     );
+
+    // Stream control disabled — live stream no longer used
+    // socket.on(
+    //   "host-stream-control",
+    //   (data: { lobbyId: string; action: string; value: any }) => {
+    //     this.handleHostStreamControl(socket, data);
+    //   },
+    // );
   }
 
   // NEW: Handle host round change
@@ -756,6 +827,8 @@ class TriviaSocket {
     // ======================================================
 
     const isSameRound = existingLobby.currentRound === roundIndex;
+    const isFreshGame =
+      prevRoundIndex === undefined || prevRoundIndex < 0;
     const currentRoundId = this.currentRoundIds.get(lobbyId);
 
     if (currentRoundId && !isSameRound) {
@@ -771,22 +844,56 @@ class TriviaSocket {
       roundId,
     );
 
-    // Update DB with NEW status AND the SAVED progress array
+    const playersForUpdate = isFreshGame
+      ? existingLobby.players.map((p) => ({
+          userId: p.userId,
+          name: p.name,
+          email: p.email,
+          score: 0,
+          roundScores: [],
+          joinedAt: p.joinedAt,
+          socketId: p.socketId,
+          hasAnsweredCurrentQuestion: false,
+          lastAnswerTime: undefined,
+          lastAnswerCorrect: undefined,
+          lastAnswer: undefined,
+        }))
+      : existingLobby.players;
+
     const updates: Partial<ILobby> = {
+      players: playersForUpdate,
       currentRound: roundIndex,
       totalQuestionsInRound: totalQuestionsInRound,
-      roundProgress: updatedRoundProgress, // <--- SAVES THE PREVIOUS ROUND DATA
+      roundProgress: isFreshGame ? [] : updatedRoundProgress,
 
-      // If same round, stay. If new round, jump to saved index.
       currentQuestionIndex: isSameRound
         ? existingLobby.currentQuestionIndex
-        : savedIndex,
+        : isFreshGame
+          ? 0
+          : savedIndex,
       currentQuestion: isSameRound ? existingLobby.currentQuestion : null,
       status: "waiting",
       gameState: isSameRound ? existingLobby.gameState : "lobby",
+      startTime: undefined,
     };
 
     await this.updateLobby(lobbyId, updates);
+
+    if (isFreshGame) {
+      const freshBoard = [...playersForUpdate]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((p, index) => ({
+          rank: index + 1,
+          userId: p.userId,
+          name: p.name,
+          score: 0,
+          roundScore: 0,
+        }));
+      this.io.to(lobbyId).emit("lobby-update", {
+        type: "leaderboard-cleared",
+        data: { leaderboard: freshBoard },
+      });
+    }
 
     this.io.to(lobbyId).emit("lobby-update", {
       type: "round-changed",
@@ -798,7 +905,7 @@ class TriviaSocket {
         currentQuestionIndex: isSameRound
           ? existingLobby.currentQuestionIndex
           : savedIndex,
-        message: `Now playing: ${roundName}`,
+        message: `Round ${roundIndex + 1}: ${roundName}`,
       },
     });
 
@@ -1162,34 +1269,24 @@ class TriviaSocket {
     }
   }
 
-  // Handle host stream control
-  private async handleHostStreamControl(
-    socket: AuthenticatedSocket,
-    data: { lobbyId: string; action: string; value: any },
-  ) {
-    const { lobbyId, action, value } = data;
-
-    if (action === "change_url") {
-      await this.updateLobby(lobbyId, {
-        streamUrl: value,
-      });
-    }
-
-    console.log(
-      `🎮 Host stream control: ${action} = ${value} for lobby: ${lobbyId}`,
-    );
-
-    // Broadcast to ALL players in the lobby
-    this.io.to(lobbyId).emit("lobby-update", {
-      type: "stream-control",
-      data: {
-        action,
-        value,
-        fromHost: socket.user?.full_name,
-        timestamp: Date.now(),
-      },
-    });
-  }
+  // Stream control disabled — live stream no longer used
+  // private async handleHostStreamControl(
+  //   socket: AuthenticatedSocket,
+  //   data: { lobbyId: string; action: string; value: any },
+  // ) {
+  //   const { lobbyId, action, value } = data;
+  //
+  //   if (action === "change_url") {
+  //     await this.updateLobby(lobbyId, {
+  //       streamUrl: value,
+  //     });
+  //   }
+  //
+  //   this.io.to(lobbyId).emit("lobby-update", {
+  //     type: "stream-control",
+  //     data: { action, value, fromHost: socket.user?.full_name, timestamp: Date.now() },
+  //   });
+  // }
 
   // Handle answer submission
   private async handleAnswerSubmission(
@@ -1322,6 +1419,15 @@ class TriviaSocket {
         timeTaken: timeTakenSeconds.toFixed(1),
       });
 
+      const scoreLeaderboard = [...updatedLobby.players]
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .map((p, index) => ({
+          rank: index + 1,
+          userId: p.userId,
+          name: p.name,
+          score: p.score || 0,
+        }));
+
       this.io.to(lobbyId).emit("lobby-update", {
         type: "score-updated",
         data: {
@@ -1333,6 +1439,13 @@ class TriviaSocket {
           isCorrect,
           answerTime: timeTakenSeconds.toFixed(1),
           newAnswer: true,
+          leaderboard: scoreLeaderboard,
+          players: updatedLobby.players.map((p) => ({
+            userId: p.userId,
+            name: p.name,
+            score: p.score || 0,
+            hasAnsweredCurrentQuestion: p.hasAnsweredCurrentQuestion,
+          })),
         },
       });
 
@@ -1507,7 +1620,22 @@ class TriviaSocket {
       const updatedLobby = await this.updateLobby(lobbyId, {
         status: "waiting",
         gameState: "results",
-        roundProgress: updatedRoundProgress, // Commit to DB
+        roundProgress: updatedRoundProgress,
+        currentQuestion: null,
+        startTime: undefined,
+        players: lobby.players.map((p) => ({
+          userId: p.userId,
+          name: p.name,
+          email: p.email,
+          score: p.score,
+          roundScores: p.roundScores,
+          joinedAt: p.joinedAt,
+          socketId: p.socketId,
+          hasAnsweredCurrentQuestion: false,
+          lastAnswerTime: undefined,
+          lastAnswerCorrect: undefined,
+          lastAnswer: undefined,
+        })),
       });
 
       if (!updatedLobby) return;
@@ -1532,12 +1660,18 @@ class TriviaSocket {
           rank: index + 1,
         }));
 
+      const currentRoundIndex = this.currentRounds.get(lobbyId) ?? 0;
+
       this.io.to(lobbyId).emit("lobby-update", {
         type: "question-ended",
         data: {
           correctAnswer: lobby.currentQuestion?.correctAnswer,
           leaderboard: leaderboard,
           isRoundOver: isLastQuestion,
+          completedQuestionIndex: lobby.currentQuestionIndex || 0,
+          nextQuestionIndex: nextIndex,
+          totalQuestionsInRound: totalQuestions,
+          currentRound: currentRoundIndex,
           // 🆕 NEW: Include analytics data
           questionAnalytics: {
             totalAnswered,

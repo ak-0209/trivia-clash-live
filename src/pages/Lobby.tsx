@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Users,
   Clock,
-  Tv,
   Trophy,
   User,
   Info,
@@ -14,17 +13,18 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
-import { LobbyStreamView } from "@/components/LobbyStreamView";
+// import { LobbyStreamView } from "@/components/LobbyStreamView";
 import dressingroom from "@/assets/dressingroom.webp";
 import { LeaderboardSidebar } from "./LeaderBoard";
 import { LeaderboardCard } from "./LeaderboardList";
-import { motion } from "framer-motion";
 
 // Types for WebSocket data
 interface LobbyUser {
   userId: string;
   name: string;
   score: number;
+  hasAnsweredCurrentQuestion?: boolean;
+  roundScores?: { roundId: string; score: number }[];
 }
 
 interface LobbyData {
@@ -56,8 +56,9 @@ const Lobby = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
-  const constraintsRef = useRef(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const questionStartTimeRef = useRef<number | null>(null);
+  const questionTimeLimitRef = useRef(30);
 
   const [countdown, setCountdown] = useState(0);
   const [playerCount, setPlayerCount] = useState(0);
@@ -70,17 +71,28 @@ const Lobby = () => {
   const [totalRounds, setTotalRounds] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [totalQuestionsInRound, setTotalQuestionsInRound] = useState(0);
-  const [isStreamMuted, setIsStreamMuted] = useState(false);
-  const [currentStreamUrl, setCurrentStreamUrl] = useState(
-    import.meta.env.VITE_YOUTUBE_STREAM_URL ||
-      "https://www.youtube.com/embed/YDvsBbKfLPA",
-  );
+  // Stream disabled — no longer used
+  // const [isStreamMuted, setIsStreamMuted] = useState(false);
+  // const [currentStreamUrl, setCurrentStreamUrl] = useState(
+  //   import.meta.env.VITE_YOUTUBE_STREAM_URL ||
+  //     "https://www.youtube.com/embed/YDvsBbKfLPA",
+  // );
+  const [currentRoundName, setCurrentRoundName] = useState("");
+  const [nextQuestionIndex, setNextQuestionIndex] = useState(0);
+  const [isRoundOver, setIsRoundOver] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
-  const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>([]);
+  const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>(() => {
+    try {
+      const cached = sessionStorage.getItem("lobbyLiveLeaderboard");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const userDataStr = localStorage.getItem("user");
   const userData = userDataStr ? JSON.parse(userDataStr) : {};
@@ -88,52 +100,40 @@ const Lobby = () => {
   // Extract the ID (ensure the key matches your backend, e.g., userData.id or userData.userId)
   const currentUserId = userData.id || userData.userId;
 
-  // ADD THIS: Effect to handle timer based on lobbyStatus
+  // Question timer: sync from server startTime (pre-question countdown uses socket events only)
   useEffect(() => {
-    // Clear any existing timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
 
-    // Only start timer if we're in countdown or active state
-    if (
-      (lobbyStatus === "active" || lobbyStatus === "countdown") &&
-      countdown > 0
-    ) {
-      console.log(
-        `Starting timer for ${lobbyStatus} with ${countdown} seconds`,
-      );
-
-      timerIntervalRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            // Timer reached 0, clear interval
-            if (timerIntervalRef.current) {
-              clearInterval(timerIntervalRef.current);
-              timerIntervalRef.current = null;
-            }
-
-            // If countdown finished, update status
-            if (lobbyStatus === "countdown") {
-              setLobbyStatus("active");
-            }
-
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (lobbyStatus !== "active" || !questionStartTimeRef.current) {
+      return;
     }
 
-    // Cleanup on unmount or when dependencies change
+    const tick = () => {
+      const start = questionStartTimeRef.current;
+      if (!start) return;
+      const limit = questionTimeLimitRef.current;
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const remaining = Math.max(0, limit - elapsed);
+      setCountdown(remaining);
+      if (remaining <= 0 && timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+
+    tick();
+    timerIntervalRef.current = setInterval(tick, 1000);
+
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
     };
-  }, [lobbyStatus]); // Re-run when lobbyStatus changes
+  }, [lobbyStatus, currentQuestion?.id]);
 
   useEffect(() => {
     // Get user data from localStorage
@@ -220,6 +220,7 @@ const Lobby = () => {
       "lobby-joined",
       (data: {
         lobby: LobbyData;
+        userHasAnswered?: boolean;
         totalQuestions?: number;
         totalRounds?: number;
         currentRound?: number;
@@ -257,11 +258,14 @@ const Lobby = () => {
         if (data.totalQuestions) {
           setTotalQuestions(data.totalQuestions);
         }
-        if (data.lobby.streamUrl) {
-          setCurrentStreamUrl(data.lobby.streamUrl);
-        }
-
-        updateLobbyState(data.lobby);
+        updateLobbyState({
+          ...data.lobby,
+          userHasAnswered: data.userHasAnswered,
+          totalRounds: data.totalRounds ?? data.lobby.totalRounds,
+          currentRound: data.currentRound ?? data.lobby.currentRound,
+          totalQuestionsInRound:
+            data.totalQuestionsInRound ?? data.lobby.totalQuestionsInRound,
+        });
         toast({
           title: `Welcome to ${data.lobby.name}!`,
           description: `There are ${data.lobby.playerCount} players in the lobby`,
@@ -306,37 +310,86 @@ const Lobby = () => {
     };
   }, [navigate, toast]);
 
-  const updateLobbyState = (data: any) => {
-    // Clear any old local timers
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
+  const persistLeaderboard = (lb: typeof liveLeaderboard) => {
+    setLiveLeaderboard(lb);
+    try {
+      sessionStorage.setItem("lobbyLiveLeaderboard", JSON.stringify(lb));
+    } catch {
+      /* ignore */
     }
+  };
 
+  const playersToLeaderboard = (players: LobbyUser[]) =>
+    [...players]
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .map((p, index) => ({
+        rank: index + 1,
+        userId: p.userId,
+        name: p.name,
+        score: p.score || 0,
+        roundScore: p.roundScores?.[0]?.score,
+      }));
+
+  const syncLeaderboardFromPlayers = (players: LobbyUser[]) => {
+    if (players.length > 0) {
+      persistLeaderboard(playersToLeaderboard(players));
+    }
+  };
+
+  const updateLobbyState = (data: any) => {
     // 1. Extract data correctly (handling nested or flat structure)
     const lobby = data.lobby || data;
     const serverQuestion = data.currentQuestion || lobby.currentQuestion;
+
+    const currentPlayer = lobby.players?.find(
+      (p: LobbyUser) => String(p.userId) === String(currentUserId),
+    );
     const userHasAnswered =
-      data.userHasAnswered ?? lobby.userHasAnswered ?? false;
+      data.userHasAnswered ??
+      currentPlayer?.hasAnsweredCurrentQuestion ??
+      false;
 
     // 2. Set Metadata
     setLobbyName(lobby.name || "Main Lobby");
     setPlayerCount(lobby.playerCount || 0);
     setLobbyUsers(lobby.players || []);
+    syncLeaderboardFromPlayers(lobby.players || []);
 
     // Normalize status: "in-progress" -> "active"
     const normalizedStatus =
       (lobby.status === "in-progress" ? "active" : lobby.status) || "waiting";
     setLobbyStatus(normalizedStatus);
 
-    setCountdown(lobby.countdown || 0);
     setCurrentQuestionIndex(lobby.currentQuestionIndex || 0);
 
-    // 3. SET THE QUESTION FROM SERVER DATA (Fixes the Reload bug)
-    if (serverQuestion) {
+    const isQuestionLive =
+      lobby.status === "in-progress" || normalizedStatus === "active";
+
+    // 3. Rehydrate question only while a question is actually live
+    if (serverQuestion && isQuestionLive) {
       console.log("Rehydrating question:", serverQuestion);
       setCurrentQuestion(serverQuestion);
       setHasAnswered(userHasAnswered);
+
+      const timeLimit = serverQuestion.timeLimit || 30;
+      questionTimeLimitRef.current = timeLimit;
+
+      if (lobby.startTime) {
+        const startMs = new Date(lobby.startTime).getTime();
+        questionStartTimeRef.current = startMs;
+        const elapsed = Math.floor((Date.now() - startMs) / 1000);
+        setCountdown(Math.max(0, timeLimit - elapsed));
+      } else if (typeof lobby.countdown === "number" && lobby.countdown > 0) {
+        setCountdown(lobby.countdown);
+      } else {
+        setCountdown(timeLimit);
+        questionStartTimeRef.current = Date.now();
+      }
+    } else {
+      questionStartTimeRef.current = null;
+      setCurrentQuestion(null);
+      setHasAnswered(false);
+      setCountdown(lobby.countdown || 0);
     }
 
     // 4. Sync Rounds
@@ -351,12 +404,7 @@ const Lobby = () => {
   const handleLobbyUpdate = (type: string, data: any) => {
     switch (type) {
       case "countdown-started":
-        // Clear any existing timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
+        questionStartTimeRef.current = null;
         setLobbyStatus("countdown");
         setCountdown(data.countdown);
         setCurrentQuestionIndex(data.questionIndex);
@@ -379,43 +427,56 @@ const Lobby = () => {
         if (data.player) {
           setLobbyUsers((prev) => {
             const existing = prev.find((p) => p.userId === data.player.userId);
-            if (!existing) {
-              return [...prev, data.player];
-            }
-            return prev;
+            const next = existing ? prev : [...prev, data.player];
+            syncLeaderboardFromPlayers(next);
+            return next;
           });
         }
         break;
 
       case "player-left":
         setPlayerCount(data.playerCount);
-        setLobbyUsers((prev) =>
-          prev.filter((user) => user.userId !== data.userId),
-        );
+        setLobbyUsers((prev) => {
+          const next = prev.filter((user) => user.userId !== data.userId);
+          syncLeaderboardFromPlayers(next);
+          return next;
+        });
         break;
 
       case "score-updated":
-        setLobbyUsers((prev) =>
-          prev.map((user) =>
-            user.userId === data.userId ? { ...user, score: data.score } : user,
-          ),
-        );
+        if (data.players?.length) {
+          setLobbyUsers(data.players);
+          syncLeaderboardFromPlayers(data.players);
+        } else {
+          setLobbyUsers((prev) => {
+            const next = prev.map((user) =>
+              user.userId === data.userId
+                ? { ...user, score: data.score }
+                : user,
+            );
+            syncLeaderboardFromPlayers(next);
+            return next;
+          });
+        }
+        if (data.leaderboard?.length) {
+          persistLeaderboard(data.leaderboard);
+        }
         break;
 
       case "question-started":
-        // Clear any existing timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
         setLobbyStatus("active");
         setCurrentQuestion(data.question);
         setCurrentQuestionIndex(data.questionIndex);
+        setIsRoundOver(false);
         setSelectedAnswer("");
         setHasAnswered(false);
+
         const timeLimit = data.question?.timeLimit || data.timeLimit || 30;
-        setCountdown(timeLimit);
+        questionTimeLimitRef.current = timeLimit;
+        const startMs = data.startTime || Date.now();
+        questionStartTimeRef.current = startMs;
+        const elapsed = Math.floor((Date.now() - startMs) / 1000);
+        setCountdown(Math.max(0, timeLimit - elapsed));
 
         toast({
           title: "Question Started!",
@@ -424,32 +485,57 @@ const Lobby = () => {
         break;
 
       case "question-ended":
-        // Clear timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
+        questionStartTimeRef.current = null;
 
         setLobbyStatus("waiting");
         setCurrentQuestion(null);
         setHasAnswered(false);
         setCountdown(0);
+
+        if (data.leaderboard?.length) {
+          persistLeaderboard(data.leaderboard);
+        }
+        if (data.completedQuestionIndex !== undefined) {
+          setCurrentQuestionIndex(data.completedQuestionIndex);
+        }
+        if (data.nextQuestionIndex !== undefined) {
+          setNextQuestionIndex(data.nextQuestionIndex);
+        }
+        if (data.totalQuestionsInRound) {
+          setTotalQuestionsInRound(data.totalQuestionsInRound);
+        }
+        if (data.currentRound !== undefined) {
+          setCurrentRound(data.currentRound);
+        }
+        if (data.isRoundOver !== undefined) {
+          setIsRoundOver(data.isRoundOver);
+        }
+
         toast({
-          title: "Question Ended!",
-          description: `Correct answer: ${data.correctAnswer}`,
+          title: "Question Ended",
+          description: data.correctAnswer
+            ? `Correct answer: ${data.correctAnswer}`
+            : "See the leaderboard for updated scores.",
+          duration: 8000,
         });
+
+        if (data.isRoundOver) {
+          toast({
+            title: "Round complete",
+            description: "Waiting for the host to start the next round.",
+            duration: 10000,
+          });
+        }
         break;
 
       case "round-changed":
-        // Clear timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
+        questionStartTimeRef.current = null;
         setCurrentRound(data.roundIndex);
         setCurrentQuestionIndex(0);
+        setNextQuestionIndex(1);
+        setIsRoundOver(false);
         setTotalQuestionsInRound(data.totalQuestionsInRound);
+        setCurrentRoundName(data.roundName || "");
         setCurrentQuestion(null);
         setLobbyStatus("waiting");
         setCountdown(0);
@@ -460,7 +546,7 @@ const Lobby = () => {
         break;
 
       case "game-ended":
-        // Clear timer
+        questionStartTimeRef.current = null;
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
           timerIntervalRef.current = null;
@@ -468,32 +554,62 @@ const Lobby = () => {
 
         setLobbyStatus("waiting");
         setCountdown(0);
+        setCurrentQuestion(null);
+        setHasAnswered(false);
+
+        if (data.leaderboard?.length) {
+          persistLeaderboard(data.leaderboard);
+        } else {
+          setLiveLeaderboard([]);
+          sessionStorage.removeItem("lobbyLiveLeaderboard");
+        }
+
+        const winner = data.leaderboard?.[0];
         toast({
           title: "Game Over!",
-          description: `Winner: ${data.winner.name} with ${data.winner.score} points`,
+          description: winner
+            ? `${winner.name} wins with ${winner.score} points`
+            : "The game has ended.",
+          duration: 10000,
         });
         break;
 
-      case "stream-control":
-        if (data.action === "mute") {
-          setIsStreamMuted(data.value);
-        } else if (data.action === "change_url") {
-          setCurrentStreamUrl(data.value);
+      // Stream control disabled
+      // case "stream-control":
+      //   break;
+
+      case "leaderboard-cleared":
+        if (data.leaderboard?.length) {
+          persistLeaderboard(data.leaderboard);
+          setLobbyUsers(
+            data.leaderboard.map(
+              (p: { userId: string; name: string; score: number }) => ({
+                userId: p.userId,
+                name: p.name,
+                score: p.score || 0,
+              }),
+            ),
+          );
+        } else {
+          setLiveLeaderboard([]);
+          sessionStorage.removeItem("lobbyLiveLeaderboard");
         }
+        toast({
+          title: "Scores reset",
+          description:
+            data.message || "Leaderboard cleared for a new game",
+        });
         break;
 
       case "lobby-reset":
-        // Clear timer
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
+        questionStartTimeRef.current = null;
         setLobbyStatus("waiting");
         setCountdown(0);
         setCurrentQuestionIndex(0);
         setCurrentRound(0);
         setLobbyUsers([]);
+        setLiveLeaderboard([]);
+        sessionStorage.removeItem("lobbyLiveLeaderboard");
         toast({
           title: "Lobby Reset",
           description: "Lobby has been reset",
@@ -533,11 +649,43 @@ const Lobby = () => {
       socketRef.current.emit("leave-lobby");
       socketRef.current.disconnect();
     }
+    sessionStorage.removeItem("lobbyLiveLeaderboard");
     navigate("/");
   };
 
-  const totalTime = 30;
-  const progress = (countdown / totalTime) * 100;
+  const totalTime =
+    currentQuestion?.timeLimit || questionTimeLimitRef.current || 30;
+  const progress = totalTime > 0 ? (countdown / totalTime) * 100 : 0;
+
+  const roundLabel =
+    currentRoundName ||
+    (totalRounds > 0 ? `Round ${currentRound + 1}` : "No round active");
+
+  const questionProgressLabel = (() => {
+    if (totalQuestionsInRound <= 0) return "Questions not loaded yet";
+    if (lobbyStatus === "active" && currentQuestionIndex > 0) {
+      return `Question ${currentQuestionIndex} of ${totalQuestionsInRound}`;
+    }
+    if (currentQuestionIndex > 0) {
+      if (isRoundOver) {
+        return `Finished ${currentQuestionIndex} of ${totalQuestionsInRound} this round`;
+      }
+      const next =
+        nextQuestionIndex > 0
+          ? nextQuestionIndex
+          : currentQuestionIndex + 1;
+      if (next <= totalQuestionsInRound) {
+        return `Completed ${currentQuestionIndex} of ${totalQuestionsInRound} · Up next: Q${next}`;
+      }
+      return `Completed ${currentQuestionIndex} of ${totalQuestionsInRound}`;
+    }
+    return `Up next: Question 1 of ${totalQuestionsInRound}`;
+  })();
+
+  const questionProgressPercent =
+    totalQuestionsInRound > 0 && currentQuestionIndex > 0
+      ? (currentQuestionIndex / totalQuestionsInRound) * 100
+      : 0;
 
   console.log(currentQuestion);
 
@@ -558,6 +706,8 @@ const Lobby = () => {
         isOpen={isLeaderboardOpen}
         onClose={() => setIsLeaderboardOpen(false)}
         currentRoundIndex={currentRound}
+        liveLeaderboard={liveLeaderboard}
+        currentUserId={currentUserId}
       />
       <div className="mx-auto max-w-7xl">
         <div className="hostpanel-header-left flex items-center justify-between relative">
@@ -576,7 +726,6 @@ const Lobby = () => {
                   {[
                     "Wait for host to start questions",
                     "Answer quickly for more points",
-                    "Live stream shows host content",
                     "Scores update in real-time",
                     "Game is organized into rounds",
                   ].map((text, i) => (
@@ -616,40 +765,8 @@ const Lobby = () => {
 
         {/* Main Grid */}
         <div className="lobby-grid">
-          {/* Left Column - Stream and Info */}
-          <div className="space-y-6 flex flex-col gap-4" ref={constraintsRef}>
-            <motion.div
-              drag
-              // Ensures the video doesn't get dragged off-screen
-              dragConstraints={constraintsRef}
-              dragElastic={0.1}
-              dragMomentum={false}
-              className="
-                fixed right-4 z-50
-                md:relative md:top-0 md:right-0 md:w-full md:h-auto md:z-auto
-                cursor-move touch-none
-              "
-              // Disable dragging on desktop so it stays in the grid
-              onPointerDown={(e) => {
-                if (window.innerWidth >= 768) e.stopPropagation();
-              }}
-            >
-              {/* Visual indicator that it's draggable (Mobile only) */}
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-white/20 h-1 w-8 rounded-full md:hidden" />
-
-              <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10">
-                <LobbyStreamView
-                  youtubeUrl={currentStreamUrl}
-                  isMuted={isStreamMuted}
-                />
-              </div>
-            </motion.div>
-
-            <div className="h-[220px] w-full md:hidden" aria-hidden="true" />
-            <div className="hidden md:block">
-              {/* This is empty, just maintains grid spacing on desktop */}
-            </div>
-
+          {/* Left Column - Questions (stream removed) */}
+          <div className="space-y-6 flex flex-col gap-4">
             {/* QUESTION OVERLAY - APPEARS WHEN ACTIVE */}
             {lobbyStatus === "active" && currentQuestion && (
               <div className="w-full max-w-2xl mx-auto p-6 glassmorphism-medium rounded-[1rem] border border-white/10 shadow-2xl text-white font-sans">
@@ -804,8 +921,52 @@ const Lobby = () => {
             )}
           </div>
 
-          {/* Right Column - Players List */}
+          {/* Right Column - Progress, players, leaderboard */}
           <div className="space-y-6">
+            <Card className="glassmorphism-medium p-5 border border-white/10">
+              <h2 className="leaguegothic text-2xl italic uppercase tracking-wider text-white mb-4">
+                Your progress
+              </h2>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/60">Round</span>
+                  <span className="font-bold text-white">
+                    {totalRounds > 0
+                      ? `${roundLabel} (${currentRound + 1} of ${totalRounds})`
+                      : roundLabel}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/60">Questions</span>
+                  <span className="font-bold text-white">
+                    {questionProgressLabel}
+                  </span>
+                </div>
+                {totalQuestionsInRound > 0 && (
+                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-500"
+                      style={{ width: `${questionProgressPercent}%` }}
+                    />
+                  </div>
+                )}
+                <div className="flex justify-between text-[10px] uppercase tracking-widest text-white/40">
+                  <span>
+                    {lobbyStatus === "active"
+                      ? "Answering now"
+                      : lobbyStatus === "countdown"
+                        ? "Starting soon"
+                        : isRoundOver
+                          ? "Round finished"
+                          : "Waiting for host"}
+                  </span>
+                  {playerCount > 0 && (
+                    <span>{playerCount} players in lobby</span>
+                  )}
+                </div>
+              </div>
+            </Card>
+
             {/* Players List */}
             <Card className="glass-panel p-4 flex flex-col items-center justify-center text-center gap-4">
               <div className="self-stretch inline-flex flex-col items-start rounded-3xl shadow-2xl">
@@ -856,11 +1017,25 @@ const Lobby = () => {
               </div>
             </Card>
 
-            <LeaderboardCard
-              currentRoundIndex={0}
-              currentUserId={currentUserId}
-              liveLeaderboard={liveLeaderboard}
-            />
+            <div className="space-y-2">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsLeaderboardOpen(true)}
+                  className="text-white border-white/20"
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Full leaderboard ({liveLeaderboard.length || playerCount})
+                </Button>
+              </div>
+              <LeaderboardCard
+                currentRoundIndex={currentRound}
+                currentUserId={currentUserId}
+                liveLeaderboard={liveLeaderboard}
+              />
+            </div>
 
             {/* Quick Info */}
             {/* <Card className="glass-panel p-6">
@@ -898,7 +1073,9 @@ const Lobby = () => {
           <div className="relative flex flex-col items-center">
             {/* Sub-header */}
             <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-2">
-              Question Starting In
+              {currentQuestionIndex > 0
+                ? `Question ${currentQuestionIndex} · Starting in`
+                : "Question Starting In"}
             </span>
 
             {/* Large Animated Countdown */}

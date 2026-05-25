@@ -22,14 +22,18 @@ interface LeaderboardSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   currentRoundIndex: number;
-  rounds?: Round[]; // <--- MADE OPTIONAL
+  rounds?: Round[];
+  liveLeaderboard?: Player[];
+  currentUserId?: string;
 }
 
 export function LeaderboardSidebar({
   isOpen,
   onClose,
   currentRoundIndex,
-  rounds: propRounds, // <--- Rename prop to avoid conflict
+  rounds: propRounds,
+  liveLeaderboard,
+  currentUserId,
 }: LeaderboardSidebarProps) {
   const [selectedRoundId, setSelectedRoundId] = useState<string>("overall");
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
@@ -84,13 +88,6 @@ export function LeaderboardSidebar({
     }
   }, [isOpen, activeRounds, currentRoundIndex]);
 
-  // 3. Fetch Leaderboard
-  useEffect(() => {
-    if (isOpen) {
-      fetchLeaderboard();
-    }
-  }, [isOpen, selectedRoundId]);
-
   const fetchLeaderboard = async () => {
     setIsLoading(true);
     try {
@@ -102,10 +99,13 @@ export function LeaderboardSidebar({
         userData.token;
 
       let url = `${API_BASE}/lobbies/main-lobby/leaderboard`;
-
+      const params = new URLSearchParams();
       if (selectedRoundId !== "overall") {
-        url += `?type=round&roundId=${selectedRoundId}`;
+        params.set("type", "round");
+        params.set("roundId", selectedRoundId);
       }
+      const qs = params.toString();
+      if (qs) url += `?${qs}`;
 
       const response = await fetch(url, {
         headers: { Authorization: token ? `Bearer ${token}` : "" },
@@ -121,6 +121,20 @@ export function LeaderboardSidebar({
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (
+      selectedRoundId === "overall" &&
+      liveLeaderboard &&
+      liveLeaderboard.length > 0
+    ) {
+      setLeaderboard(liveLeaderboard);
+      setIsLoading(false);
+      return;
+    }
+    fetchLeaderboard();
+  }, [isOpen, selectedRoundId, liveLeaderboard]);
 
   // Styles
   const getRankStyles = (index: number) => {
@@ -243,32 +257,46 @@ export function LeaderboardSidebar({
                   No scores yet.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {leaderboard.map((player, index) => (
-                    <div
-                      key={player.userId}
-                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/80 border border-zinc-800"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-7 w-7 items-center justify-center rounded-full font-bold text-xs ${getRankStyles(
-                            index,
-                          )}`}
-                        >
-                          {index + 1}
+                <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
+                  {leaderboard.map((player, index) => {
+                    const you =
+                      currentUserId &&
+                      String(player.userId) === String(currentUserId);
+                    return (
+                      <div
+                        key={player.userId}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          you
+                            ? "bg-yellow-500/10 border-yellow-500/30"
+                            : "bg-zinc-950/80 border-zinc-800"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-bold text-xs ${getRankStyles(
+                              index,
+                            )}`}
+                          >
+                            {index + 1}
+                          </div>
+                          <span
+                            className={`font-medium text-sm truncate ${
+                              you ? "text-yellow-400" : "text-zinc-200"
+                            }`}
+                          >
+                            {player.name}
+                            {you ? " (you)" : ""}
+                          </span>
                         </div>
-                        <span className="font-medium text-sm text-zinc-200 truncate max-w-[150px]">
-                          {player.name}
+                        <span className="text-sm font-bold text-white shrink-0 ml-2">
+                          {selectedRoundId === "overall"
+                            ? player.score
+                            : (player.roundScore ?? 0)}{" "}
+                          pts
                         </span>
                       </div>
-                      <span className="text-sm font-bold text-white">
-                        {selectedRoundId === "overall"
-                          ? player.score
-                          : player.roundScore}{" "}
-                        pts
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
