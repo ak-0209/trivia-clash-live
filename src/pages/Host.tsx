@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 // import StreamView from "@/components/StreamView";
 import { io, Socket } from "socket.io-client";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -42,6 +43,9 @@ interface Round {
   metadata?: Record<string, any>;
 }
 
+const QUESTIONS_PER_ROUND = 3;
+const INSTANT_START_COUNTDOWN = 1;
+
 export function joinUrl(base: string, path: string) {
   const _base = base.replace(/\/+$/, "");
   const _path = path.replace(/^\/+/, "");
@@ -50,6 +54,7 @@ export function joinUrl(base: string, path: string) {
 
 const Host = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const socketRef = useRef<Socket | null>(null);
   const questionStartTimeRef = useRef<number | null>(null);
   const questionTimeLimitRef = useRef(30);
@@ -70,6 +75,7 @@ const Host = () => {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [showRoundSelector, setShowRoundSelector] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [isRoundOver, setIsRoundOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // Modal state
@@ -145,10 +151,6 @@ const Host = () => {
     socket.on("connect", () => {
       console.log("Host connected to WebSocket");
       setIsConnected(true);
-      toast({
-        title: "Host Connected",
-        description: "You're now controlling the game",
-      });
     });
 
     socket.on("disconnect", () => {
@@ -253,12 +255,6 @@ const Host = () => {
               const elapsed = Math.floor((Date.now() - startMs) / 1000);
               const remaining = Math.max(0, timeLimit - elapsed);
               setCountdown(remaining);
-              if (remaining > 0) {
-                toast({
-                  title: "Timer Continued",
-                  description: `${remaining}s remaining on this question`,
-                });
-              }
             } else if (remainingTime && remainingTime > 0) {
               setCountdown(remainingTime);
               questionStartTimeRef.current =
@@ -272,14 +268,6 @@ const Host = () => {
           }
 
           // Show toast for state restoration
-          if (wasGameInProgress && currentRound >= 0) {
-            toast({
-              title: "Game State Restored",
-              description: `Resumed from Round ${currentRound + 1}, question ${
-                lobby.currentQuestionIndex || 1
-              }`,
-            });
-          }
         }
       },
     );
@@ -324,10 +312,6 @@ const Host = () => {
     setCurrentQuestion(0);
     setCurrentQuestionData(null);
     setLastQuestionAnalytics(null);
-    toast({
-      title: "Leaderboard cleared",
-      description: "All scores reset. Safe to start a new game.",
-    });
   };
 
   const startFirstRound = async () => {
@@ -343,10 +327,6 @@ const Host = () => {
       }
 
       if (!roundsLoaded) {
-        toast({
-          title: "Loading",
-          description: "Please wait while rounds are loading...",
-        });
         reject();
         return;
       }
@@ -366,6 +346,7 @@ const Host = () => {
       clearLeaderboardLocal();
 
       setGameStarted(true);
+      setIsRoundOver(false);
       setCurrentRound(0);
       setCurrentQuestion(0);
       setTotalRounds(rounds.length);
@@ -382,10 +363,6 @@ const Host = () => {
       // Fetch questions for first round
       fetchQuestionsInRound(firstRound.id).then((totalQuestions) => {
         setTotalQuestionsInRound(totalQuestions);
-        toast({
-          title: "Game Started!",
-          description: `Round 1: ${firstRound.name} is now active`,
-        });
         resolve();
       });
     });
@@ -489,9 +466,9 @@ const Host = () => {
 
       if (response.ok) {
         const data = await response.json();
-        const total = data.totalQuestions ?? 0;
+        const total = Math.min(data.totalQuestions ?? 0, QUESTIONS_PER_ROUND);
         setTotalQuestionsInRound(total);
-        console.log(`Fetched ${total} questions for round ${roundId}`);
+        console.log(`Fetched ${total} playable questions for round ${roundId}`);
         return total;
       } else {
         console.error(
@@ -499,13 +476,13 @@ const Host = () => {
           response.status,
           response.statusText,
         );
-        setTotalQuestionsInRound(5); // fallback
-        return 5;
+        setTotalQuestionsInRound(QUESTIONS_PER_ROUND);
+        return QUESTIONS_PER_ROUND;
       }
     } catch (error) {
       console.error("Error fetching questions in round:", error);
-      setTotalQuestionsInRound(5); // fallback
-      return 5;
+      setTotalQuestionsInRound(QUESTIONS_PER_ROUND);
+      return QUESTIONS_PER_ROUND;
     }
   };
 
@@ -517,9 +494,7 @@ const Host = () => {
         break;
 
       case "score-updated":
-        if (data.leaderboard?.length) {
-          setLiveLeaderboard(data.leaderboard);
-        }
+        // Live leaderboard updates are intentionally delayed until "question-ended".
         break;
 
       // Add answered count handler
@@ -539,6 +514,7 @@ const Host = () => {
         setGameStatus("active");
         setCurrentQuestion(data.questionIndex);
         setAnsweredCount(0);
+        setIsRoundOver(false);
 
         const timeLimit = data.timeLimit || data.question?.timeLimit || 30;
         questionTimeLimitRef.current = timeLimit;
@@ -547,21 +523,12 @@ const Host = () => {
         const elapsed = Math.floor((Date.now() - startMs) / 1000);
         setCountdown(Math.max(0, timeLimit - elapsed));
 
-        toast({
-          title: "Question Started!",
-          description: `Question ${data.questionIndex} is now live`,
-        });
         break;
 
       case "question-ended":
         questionStartTimeRef.current = null;
         setGameStatus("waiting");
         setCountdown(0);
-
-        toast({
-          title: "Question Ended!",
-          description: `Correct answer: ${data.correctAnswer}`,
-        });
 
         // Check if analytics data was sent from server
         if (data.questionAnalytics) {
@@ -575,16 +542,23 @@ const Host = () => {
           setLastQuestionAnalytics(null);
         }
 
-        if (data.isRoundOver) {
-          toast({
-            title: "🏆 ROUND COMPLETE",
-            description:
-              "That was the last question! Please click 'Next Round'.",
-            duration: 10000,
-            className: "bg-green-600 text-white",
-          });
+        if (data.isRoundOver !== undefined) {
+          setIsRoundOver(data.isRoundOver);
         }
-
+        // Ensure host UI can detect round completion after the final question.
+        // Server sends completedQuestionIndex (1-based) + totalQuestionsInRound.
+        if (data.completedQuestionIndex !== undefined) {
+          setCurrentQuestion(data.completedQuestionIndex);
+        } else if (data.questionIndex !== undefined) {
+          setCurrentQuestion(data.questionIndex);
+        }
+        if (data.totalQuestionsInRound !== undefined) {
+          setTotalQuestionsInRound(
+            Math.min(data.totalQuestionsInRound, QUESTIONS_PER_ROUND),
+          );
+        } else if (totalQuestionsInRound <= 0) {
+          setTotalQuestionsInRound(QUESTIONS_PER_ROUND);
+        }
         if (data.leaderboard?.length) {
           setLiveLeaderboard(data.leaderboard);
         }
@@ -595,10 +569,6 @@ const Host = () => {
         setGameStatus("countdown");
         setCountdown(data.countdown);
         setCurrentQuestion(data.questionIndex);
-        toast({
-          title: "Countdown Started!",
-          description: `Question ${data.questionIndex} starting in ${data.countdown} seconds`,
-        });
         break;
 
       case "countdown":
@@ -617,15 +587,32 @@ const Host = () => {
         const finalBoard = data.leaderboard || [];
         if (finalBoard.length) {
           setLiveLeaderboard(finalBoard);
+          try {
+            localStorage.setItem(
+              "gameEndData",
+              JSON.stringify({
+                leaderboard: finalBoard,
+                gameSessionId: data.gameSessionId,
+                lobbyName: data.lobbyName,
+                timestamp: Date.now(),
+              }),
+            );
+            if (data.gameSessionId) {
+              localStorage.setItem("lastGameSessionId", data.gameSessionId);
+            }
+          } catch {
+            /* ignore */
+          }
         }
-        const top = finalBoard[0];
-        toast({
-          title: "Game ended",
-          description: top
-            ? `${top.name} wins with ${top.score} points. Players are being sent to the final leaderboard.`
-            : "Game ended. Players are being sent to the final leaderboard.",
-          duration: 8000,
-        });
+        setTimeout(() => {
+          navigate("/leaderboard", {
+            state: {
+              leaderboard: finalBoard,
+              gameSessionId: data.gameSessionId,
+              fromGameEnd: true,
+            },
+          });
+        }, 1500);
         break;
       }
 
@@ -652,10 +639,6 @@ const Host = () => {
         setGameStarted(false);
         setLastQuestionAnalytics(null);
         clearLeaderboardLocal();
-        toast({
-          title: "Lobby Reset",
-          description: "Lobby has been reset and is ready for a new game",
-        });
         break;
 
       // Stream control disabled
@@ -663,9 +646,12 @@ const Host = () => {
       //   break;
 
       case "round-changed":
+        setIsRoundOver(false);
         setCurrentRound(data.roundIndex);
         setCurrentQuestion(data.currentQuestionIndex || 0);
-        setTotalQuestionsInRound(data.totalQuestionsInRound);
+        setTotalQuestionsInRound(
+          Math.min(data.totalQuestionsInRound || 0, QUESTIONS_PER_ROUND),
+        );
         setCurrentQuestionData(null);
         setGameStatus("waiting");
         setCountdown(0);
@@ -680,10 +666,6 @@ const Host = () => {
 
         fetchQuestionsInRound(data.roundId);
 
-        toast({
-          title: "Round Changed!",
-          description: data.message || `Now playing: ${data.roundName}`,
-        });
         break;
 
       default:
@@ -691,8 +673,22 @@ const Host = () => {
     }
   };
 
-  // Open start modal
+  const isRoundActuallyComplete =
+    isRoundOver &&
+    currentRound >= 0 &&
+    currentQuestion >=
+      (totalQuestionsInRound > 0 ? totalQuestionsInRound : QUESTIONS_PER_ROUND);
+
+  // Open start modal (or advance round when this round's questions are finished)
   const handleOpenStartModal = () => {
+    if (isRoundActuallyComplete) {
+      if (currentRound < totalRounds - 1) {
+        handleNextRound();
+      } else {
+        setShowEndGameModal(true);
+      }
+      return;
+    }
     setShowStartModal(true);
   };
 
@@ -751,6 +747,9 @@ const Host = () => {
     // Regular flow for subsequent questions
     const nextQuestionIndex = currentQuestion + 1;
     const seconds = Math.min(60, Math.max(0, countdownSeconds));
+    if (nextQuestionIndex > QUESTIONS_PER_ROUND) {
+      return;
+    }
 
     // 🛡️ GUARD CLAUSE: Ensure we have a valid round index
     if (!rounds[currentRound]) {
@@ -800,16 +799,16 @@ const Host = () => {
           return;
         }
 
-        socketRef.current.emit("host-start-question", {
+        socketRef.current.emit("host-start-countdown", {
           lobbyId: "main-lobby",
-          questionIndex: 1, // First question is index 1 (1-based)
+          countdownSeconds: INSTANT_START_COUNTDOWN,
+          questionIndex: 1,
           roundId: currentRoundId,
         });
-
-        toast({
-          title: "Question Started!",
-          description: `Question 1 is now live`,
-        });
+        setCurrentQuestion(1);
+        setGameStatus("countdown");
+        setCountdown(INSTANT_START_COUNTDOWN);
+        setAnsweredCount(0);
       } catch (error) {
         console.error("Failed to start first round:", error);
       }
@@ -818,6 +817,9 @@ const Host = () => {
 
     // Regular flow for subsequent questions
     const nextQuestionIndex = currentQuestion + 1;
+    if (nextQuestionIndex > QUESTIONS_PER_ROUND) {
+      return;
+    }
     const currentRoundId = rounds[currentRound]?.id;
 
     if (!currentRoundId) {
@@ -829,21 +831,18 @@ const Host = () => {
       return;
     }
 
-    socketRef.current.emit("host-start-question", {
+    socketRef.current.emit("host-start-countdown", {
       lobbyId: "main-lobby",
+      countdownSeconds: INSTANT_START_COUNTDOWN,
       questionIndex: nextQuestionIndex,
       roundId: currentRoundId,
     });
 
     setCurrentQuestion(nextQuestionIndex);
-    setGameStatus("active");
+    setGameStatus("countdown");
+    setCountdown(INSTANT_START_COUNTDOWN);
     setAnsweredCount(0);
-    setShowStartModal(false); // Close modal here
-
-    toast({
-      title: "Question Started!",
-      description: `Question ${nextQuestionIndex} is now live`,
-    });
+    setShowStartModal(false);
   };
 
   // Start immediately
@@ -902,11 +901,6 @@ const Host = () => {
 
     socketRef.current.emit("host-end-question", "main-lobby");
     setGameStatus("waiting");
-
-    toast({
-      title: "Question Ended",
-      description: "Current question ended by host",
-    });
   };
 
   // Change to next round
@@ -927,6 +921,7 @@ const Host = () => {
     const nextRound = rounds[nextRoundIndex];
 
     // Reset question counter for new round
+    setIsRoundOver(false);
     setCurrentRound(nextRoundIndex);
     setCurrentQuestion(0);
     setGameStarted(true); // Ensure game is marked as started
@@ -940,18 +935,10 @@ const Host = () => {
 
     // Fetch questions for the new round
     fetchQuestionsInRound(nextRound.id);
-
-    toast({
-      title: "Round Changed!",
-      description: `Now playing: ${nextRound.name}`,
-    });
   };
 
   const shouldShowRoundInfo =
     (gameStarted || currentRound >= 0) && roundsLoaded && currentRound >= 0;
-  const currentRoundName = shouldShowRoundInfo
-    ? rounds[currentRound]?.name || "Unknown Round"
-    : "No Round Active";
 
   // End game
   const handleEndGame = () => {
@@ -970,12 +957,6 @@ const Host = () => {
     setGameStarted(false);
     setAnsweredCount(0);
     setShowEndGameModal(false);
-    clearLeaderboardLocal();
-
-    toast({
-      title: "Game Ended",
-      description: "Game has been ended by host",
-    });
   };
 
   // Stream controls disabled
@@ -983,13 +964,12 @@ const Host = () => {
   // const handleStreamUrlChange = (url: string) => { ... };
 
   // Determine if start button should be enabled
-  const canStartQuestion = gameStatus === "waiting" || gameStatus === "results";
-
-  // Get current round name
-  const getCurrentRoundName = () => {
-    if (!roundsLoaded || rounds.length === 0) return "No Rounds";
-    return rounds[currentRound]?.name || "Unknown Round";
-  };
+  const canStartQuestion =
+    (gameStatus === "waiting" || gameStatus === "results") &&
+    !isRoundActuallyComplete;
+  const hasMoreRounds =
+    totalRounds > 0 && currentRound >= 0 && currentRound < totalRounds - 1;
+  const showRoundCompleteActions = isRoundActuallyComplete;
 
   return (
     <div
@@ -1294,7 +1274,7 @@ const Host = () => {
                           Round {currentRound + 1} of {totalRounds}
                         </div>
                         <div className="text-lg opacity-90">
-                          {currentRoundName}
+                          {`Round ${currentRound + 1}`}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {totalQuestionsInRound} questions in this round
@@ -1342,59 +1322,93 @@ const Host = () => {
                 )}
 
                 {/* Action Buttons Section */}
-                <div className="grid grid-cols-2 gap-4">
+                {showRoundCompleteActions ? (
                   <div className="space-y-2">
-                    <Button
-                      onClick={handleOpenStartModal}
-                      disabled={!canStartQuestion}
-                      variant="ghost"
-                      className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-                      <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
-                        <Play className="w-4 h-4 mr-2 text-white" />
-                        <span className="text-xs font-bold text-white tracking-widest uppercase">
-                          {currentRound < 0 ? "START GAME" : "NEXT QUESTION"}
-                        </span>
-                      </div>
-                    </Button>
-                    <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
-                      Start the next question with countdown or immediately
+                    {hasMoreRounds ? (
+                      <Button
+                        onClick={handleNextRound}
+                        variant="ghost"
+                        className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                        <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                          <Shuffle className="w-4 h-4 mr-2 text-white" />
+                          <span className="text-xs font-bold text-white tracking-widest uppercase">
+                            NEXT ROUND
+                          </span>
+                        </div>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        onClick={() => setShowEndGameModal(true)}
+                        className="w-full h-12 text-sm inter uppercase tracking-widest bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 border-none shadow-lg rounded-full text-white"
+                      >
+                        End Game
+                      </Button>
+                    )}
+                    <p className="text-[10px] text-white/70 text-center uppercase tracking-tighter">
+                      {hasMoreRounds
+                        ? "All questions in this round are done"
+                        : "Final round complete — end the game"}
                     </p>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Button
+                        onClick={handleOpenStartModal}
+                        disabled={!canStartQuestion}
+                        variant="ghost"
+                        className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                        <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                          <Play className="w-4 h-4 mr-2 text-white" />
+                          <span className="text-xs font-bold text-white tracking-widest uppercase">
+                            {currentRound < 0 ? "START GAME" : "NEXT QUESTION"}
+                          </span>
+                        </div>
+                      </Button>
+                      <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
+                        Start the next question with countdown or immediately
+                      </p>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Button
-                      onClick={handleNextRound}
-                      disabled={
-                        currentRound >= totalRounds - 1 || currentRound < 0
-                      }
-                      variant="ghost"
-                      className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
-                      <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
-                        <Shuffle className="w-4 h-4 mr-2 text-white" />
-                        <span className="text-xs font-bold text-white tracking-widest uppercase">
-                          NEXT ROUND
-                        </span>
-                      </div>
-                    </Button>
-                    <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
-                      Move to the next round
-                    </p>
+                    <div className="space-y-2">
+                      <Button
+                        onClick={handleNextRound}
+                        disabled={
+                          currentRound >= totalRounds - 1 || currentRound < 0
+                        }
+                        variant="ghost"
+                        className="relative w-full h-12 p-[1px] rounded-full overflow-hidden group disabled:opacity-50"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#ff1a00] to-[#ff7a00]" />
+                        <div className="relative flex items-center justify-center w-full h-full bg-[#121212] rounded-full transition-colors group-hover:bg-[#1a1a1a]">
+                          <Shuffle className="w-4 h-4 mr-2 text-white" />
+                          <span className="text-xs font-bold text-white tracking-widest uppercase">
+                            NEXT ROUND
+                          </span>
+                        </div>
+                      </Button>
+                      <p className="text-[10px] text-white text-muted-foreground text-center uppercase tracking-tighter">
+                        Move to the next round
+                      </p>
+                    </div>
                   </div>
-                </div>
-
-                {!(currentRound >= totalRounds - 1 || currentRound < 0) && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setShowEndGameModal(true)}
-                    className="w-full h-10 text-sm inter uppercase tracking-widest bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 border-none shadow-lg rounded-full text-white"
-                  >
-                    End Game
-                  </Button>
                 )}
+
+                {!showRoundCompleteActions &&
+                  currentRound >= 0 && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => setShowEndGameModal(true)}
+                      className="w-full h-10 text-sm inter uppercase tracking-widest bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 border-none shadow-lg rounded-full text-white"
+                    >
+                      End Game
+                    </Button>
+                  )}
               </div>
             </Card>
 
@@ -1580,6 +1594,7 @@ const Host = () => {
                       onClick={() => {
                         setCurrentRound(index);
                         setCurrentQuestion(0);
+                        setIsRoundOver(false);
                         setTotalQuestionsInRound(0);
                         setShowRoundSelector(false);
                         setGameStarted(true); // Make sure game is marked as started
@@ -1594,16 +1609,11 @@ const Host = () => {
                           roundIndex: index,
                           roundName: round.name,
                         });
-
-                        toast({
-                          title: "Round Changed!",
-                          description: `Now playing: ${round.name}`,
-                        });
                       }}
                     >
                       <div className="flex flex-col items-start">
                         <div className="font-bold text-white">
-                          Round {index + 1}: {round.name}
+                          Round {index + 1}
                           {round.isActive && (
                             <Badge variant="secondary" className="ml-2">
                               Active
@@ -1662,11 +1672,6 @@ const Host = () => {
                   setCurrentRound(0);
                   setCurrentQuestionData(null);
                   setShowEndGameModal(false);
-
-                  toast({
-                    title: "Game Ended",
-                    description: "Game has been ended by host",
-                  });
                 }}
                 className="flex-1"
               >

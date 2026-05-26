@@ -7,6 +7,9 @@ import Round from "../models/Round";
 import mongoose from "mongoose";
 import GameSession from "../models/GameSession";
 
+const QUESTIONS_PER_ROUND = 3;
+const INSTANT_START_COUNTDOWN = 1;
+
 interface AuthenticatedSocket
   extends Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any> {
   user?: {
@@ -298,6 +301,13 @@ class TriviaSocket {
   // Start question immediately (no countdown)
   private async startQuestion(lobbyId: string, questionIndex: number) {
     try {
+      if (questionIndex > QUESTIONS_PER_ROUND) {
+        this.io.to(lobbyId).emit("error", {
+          message: `Only ${QUESTIONS_PER_ROUND} questions are allowed per round`,
+        });
+        return;
+      }
+
       // Clear any existing timers first
       this.clearLobbyTimers(lobbyId);
 
@@ -407,21 +417,26 @@ class TriviaSocket {
       })
         .sort({ roundIndex: 1 })
         .exec(); // Remove the .select("-correctIndex -correctAnswers")
+      const limitedRoundQuestions = roundQuestions.slice(0, QUESTIONS_PER_ROUND);
 
       console.log(
-        `📚 Found ${roundQuestions.length} questions for round ${round.name}`,
+        `📚 Found ${limitedRoundQuestions.length}/${roundQuestions.length} playable questions for round ${round.name}`,
       );
 
       const zeroBasedIndex = questionIndex - 1;
 
-      if (zeroBasedIndex < 0 || zeroBasedIndex >= roundQuestions.length) {
+      if (
+        questionIndex > QUESTIONS_PER_ROUND ||
+        zeroBasedIndex < 0 ||
+        zeroBasedIndex >= limitedRoundQuestions.length
+      ) {
         console.error(
-          `Question index ${zeroBasedIndex} out of range. Total questions in round: ${roundQuestions.length}`,
+          `Question index ${zeroBasedIndex} out of range. Total playable questions in round: ${limitedRoundQuestions.length}`,
         );
         return null;
       }
 
-      const question = roundQuestions[zeroBasedIndex];
+      const question = limitedRoundQuestions[zeroBasedIndex];
 
       // FIX: Make sure correctAnswer is properly set
       let correctAnswer = undefined;
@@ -495,7 +510,7 @@ class TriviaSocket {
 
       // Count questions for this round
       const total = await Question.countDocuments({ roundId, isActive: true });
-      return total;
+      return Math.min(total, QUESTIONS_PER_ROUND);
     } catch (error) {
       console.error("Error counting questions in round:", error);
       return 0;
@@ -513,7 +528,7 @@ class TriviaSocket {
         roundId: objectId,
         isActive: true,
       });
-      return total;
+      return Math.min(total, QUESTIONS_PER_ROUND);
     } catch (error) {
       console.error("Error counting questions in round by ID:", error);
       return 0;
@@ -741,7 +756,7 @@ class TriviaSocket {
       roundName: string;
     },
   ) {
-    const { lobbyId, roundId, roundIndex, roundName } = data;
+    const { lobbyId, roundId, roundName } = data;
 
     if (!roundId) {
       console.error("Round ID is required for round change");
@@ -757,6 +772,13 @@ class TriviaSocket {
 
     // We use the DB to find what round we were just on (handles refreshes/crashes)
     const allRounds = await Round.find({}).sort({ order: 1 });
+    const resolvedRoundIndex = allRounds.findIndex(
+      (r) => r._id.toString() === roundId,
+    );
+    if (resolvedRoundIndex < 0) {
+      socket.emit("error", { message: "Invalid round selected" });
+      return;
+    }
     const prevRoundIndex = existingLobby.currentRound;
     let prevRoundId: string | undefined = undefined;
 
@@ -826,7 +848,7 @@ class TriviaSocket {
     // 3. ACTIVATE AND UPDATE
     // ======================================================
 
-    const isSameRound = existingLobby.currentRound === roundIndex;
+    const isSameRound = existingLobby.currentRound === resolvedRoundIndex;
     const isFreshGame =
       prevRoundIndex === undefined || prevRoundIndex < 0;
     const currentRoundId = this.currentRoundIds.get(lobbyId);
@@ -837,11 +859,12 @@ class TriviaSocket {
 
     await this.activateRound(roundId);
 
-    this.currentRounds.set(lobbyId, roundIndex);
+    this.currentRounds.set(lobbyId, resolvedRoundIndex);
     this.currentRoundIds.set(lobbyId, roundId);
 
-    const totalQuestionsInRound = await this.getTotalQuestionsInRoundById(
-      roundId,
+    const totalQuestionsInRound = Math.min(
+      await this.getTotalQuestionsInRoundById(roundId),
+      QUESTIONS_PER_ROUND,
     );
 
     const playersForUpdate = isFreshGame
@@ -862,7 +885,7 @@ class TriviaSocket {
 
     const updates: Partial<ILobby> = {
       players: playersForUpdate,
-      currentRound: roundIndex,
+      currentRound: resolvedRoundIndex,
       totalQuestionsInRound: totalQuestionsInRound,
       roundProgress: isFreshGame ? [] : updatedRoundProgress,
 
@@ -899,13 +922,13 @@ class TriviaSocket {
       type: "round-changed",
       data: {
         roundId,
-        roundIndex,
+        roundIndex: resolvedRoundIndex,
         roundName,
         totalQuestionsInRound,
         currentQuestionIndex: isSameRound
           ? existingLobby.currentQuestionIndex
           : savedIndex,
-        message: `Round ${roundIndex + 1}: ${roundName}`,
+        message: `Round ${resolvedRoundIndex + 1}: ${roundName}`,
       },
     });
 
@@ -916,7 +939,7 @@ class TriviaSocket {
     }
 
     console.log(
-      `Round ${roundIndex} active. Resuming at ${savedIndex}. Previous round saved.`,
+      `Round ${resolvedRoundIndex} active. Resuming at ${savedIndex}. Previous round saved.`,
     );
   }
 
@@ -1122,7 +1145,19 @@ class TriviaSocket {
       }
     }
 
-    await this.startQuestion(lobbyId, questionIndex);
+    if (questionIndex > QUESTIONS_PER_ROUND) {
+      socket.emit("error", {
+        message: `Round limit reached. Maximum ${QUESTIONS_PER_ROUND} questions per round.`,
+      });
+      return;
+    }
+
+    await this.handleHostStartCountdown(socket, {
+      lobbyId,
+      countdownSeconds: INSTANT_START_COUNTDOWN,
+      questionIndex,
+      roundId,
+    });
   }
 
   // Inside your Socket Service / Controller
@@ -1420,15 +1455,6 @@ class TriviaSocket {
         timeTaken: timeTakenSeconds.toFixed(1),
       });
 
-      const scoreLeaderboard = [...updatedLobby.players]
-        .sort((a, b) => (b.score || 0) - (a.score || 0))
-        .map((p, index) => ({
-          rank: index + 1,
-          userId: p.userId,
-          name: p.name,
-          score: p.score || 0,
-        }));
-
       this.io.to(lobbyId).emit("lobby-update", {
         type: "score-updated",
         data: {
@@ -1441,13 +1467,6 @@ class TriviaSocket {
           isCorrect,
           answerTime: timeTakenSeconds.toFixed(1),
           newAnswer: true,
-          leaderboard: scoreLeaderboard,
-          players: updatedLobby.players.map((p) => ({
-            userId: p.userId,
-            name: p.name,
-            score: p.score || 0,
-            hasAnsweredCurrentQuestion: p.hasAnsweredCurrentQuestion,
-          })),
         },
       });
 
@@ -1551,11 +1570,15 @@ class TriviaSocket {
       if (!lobby) return;
 
       const currentRoundId = this.currentRoundIds.get(lobbyId);
-      const totalQuestions = lobby.totalQuestionsInRound || 0;
+      const totalQuestions = Math.min(
+        lobby.totalQuestionsInRound || QUESTIONS_PER_ROUND,
+        QUESTIONS_PER_ROUND,
+      );
 
-      // Calculate Next Index
-      const nextIndex = (lobby.currentQuestionIndex || 0) + 1;
-      const isLastQuestion = nextIndex >= totalQuestions;
+      // Calculate Next Index (1-based: Q1=1, Q2=2, Q3=3)
+      const completedIndex = lobby.currentQuestionIndex || 0;
+      const nextIndex = completedIndex + 1;
+      const isLastQuestion = completedIndex >= totalQuestions;
 
       // Update Progress Array in Database
       let updatedRoundProgress = lobby.roundProgress

@@ -211,7 +211,7 @@ export function LeaderboardSidebar({
               </Button>
 
               {/* USE activeRounds HERE */}
-              {activeRounds.map((round) => (
+              {activeRounds.map((round, index) => (
                 <Button
                   key={round.id}
                   onClick={() => setSelectedRoundId(round.id)}
@@ -223,7 +223,7 @@ export function LeaderboardSidebar({
                       : "bg-transparent text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-white"
                   }`}
                 >
-                  {round.name}
+                  {`Round ${index + 1}`}
                 </Button>
               ))}
             </div>

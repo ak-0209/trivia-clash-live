@@ -52,6 +52,9 @@ interface LobbyData {
   streamUrl?: string;
 }
 
+const QUESTIONS_PER_ROUND = 3;
+const ROUND_INTRO_MS = 2500;
+
 const Lobby = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -59,6 +62,9 @@ const Lobby = () => {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number | null>(null);
   const questionTimeLimitRef = useRef(30);
+  const roundIntroTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const [countdown, setCountdown] = useState(0);
   const [playerCount, setPlayerCount] = useState(0);
@@ -94,6 +100,10 @@ const Lobby = () => {
     roundScore: number;
     answered: boolean;
     yourAnswer?: string;
+  } | null>(null);
+  const [roundIntro, setRoundIntro] = useState<{
+    roundNumber: number;
+    questionsInRound: number;
   } | null>(null);
   const [liveLeaderboard, setLiveLeaderboard] = useState<any[]>(() => {
     try {
@@ -149,6 +159,32 @@ const Lobby = () => {
     };
   }, [lobbyStatus, currentQuestion?.id]);
 
+  const clearRoundIntro = () => {
+    if (roundIntroTimeoutRef.current) {
+      clearTimeout(roundIntroTimeoutRef.current);
+      roundIntroTimeoutRef.current = null;
+    }
+    setRoundIntro(null);
+  };
+
+  const showRoundIntro = (roundNumber: number, questionsInRound: number) => {
+    clearRoundIntro();
+    setRoundIntro({
+      roundNumber,
+      questionsInRound: questionsInRound || QUESTIONS_PER_ROUND,
+    });
+    roundIntroTimeoutRef.current = setTimeout(() => {
+      setRoundIntro(null);
+      roundIntroTimeoutRef.current = null;
+    }, ROUND_INTRO_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearRoundIntro();
+    };
+  }, []);
+
   useEffect(() => {
     // Get user data from localStorage
     const userDataStr = localStorage.getItem("user");
@@ -193,10 +229,6 @@ const Lobby = () => {
     socket.on("connect", () => {
       console.log("Connected to WebSocket");
       setIsConnected(true);
-      toast({
-        title: "Connected!",
-        description: "You're now in the lobby",
-      });
     });
 
     socket.on("disconnect", (reason) => {
@@ -280,10 +312,6 @@ const Lobby = () => {
           totalQuestionsInRound:
             data.totalQuestionsInRound ?? data.lobby.totalQuestionsInRound,
         });
-        toast({
-          title: `Welcome to ${data.lobby.name}!`,
-          description: `There are ${data.lobby.playerCount} players in the lobby`,
-        });
       },
     );
 
@@ -303,15 +331,6 @@ const Lobby = () => {
         }
       },
     );
-
-    socket.on("answer-submitted", (data: { success: boolean }) => {
-      if (!data.success) return;
-      toast({
-        title: "Answer submitted",
-        description: "Locked in. Results when the timer ends.",
-        duration: 4000,
-      });
-    });
 
     socket.on("lobby-update", (data: { type: string; data: any }) => {
       console.log("Lobby update:", data.type, data.data);
@@ -399,12 +418,8 @@ const Lobby = () => {
     const pointsEarned = yr?.pointsEarned ?? me?.lastPointsEarned ?? 0;
     const totalScore = yr?.totalScore ?? me?.score ?? 0;
     const roundScore = yr?.roundScore ?? me?.roundScore ?? 0;
-    const roundLabel =
-      data.roundName ||
-      currentRoundName ||
-      (data.currentRound !== undefined
-        ? `Round ${data.currentRound + 1}`
-        : "Round");
+    const resolvedRound = (data.currentRound ?? currentRound) + 1;
+    const roundLabel = resolvedRound > 0 ? `Round ${resolvedRound}` : "Round 1";
 
     setRoundResults({
       roundName: roundLabel,
@@ -417,28 +432,6 @@ const Lobby = () => {
       yourAnswer,
     });
 
-    if (answered) {
-      if (isCorrect) {
-        toast({
-          title: "Correct!",
-          description: `+${pointsEarned} pts. Total: ${totalScore}. Answer: ${correctAnswer}`,
-          duration: 9000,
-        });
-      } else {
-        toast({
-          title: "Wrong",
-          description: `Correct: ${correctAnswer}. You chose: ${yourAnswer || "—"}. Total: ${totalScore}`,
-          variant: "destructive",
-          duration: 9000,
-        });
-      }
-    } else {
-      toast({
-        title: "Time's up",
-        description: `You didn't answer. Correct: ${correctAnswer}. Total: ${totalScore}`,
-        duration: 9000,
-      });
-    }
   };
 
   const updateLobbyState = (data: any) => {
@@ -458,7 +451,6 @@ const Lobby = () => {
     setLobbyName(lobby.name || "Main Lobby");
     setPlayerCount(lobby.playerCount || 0);
     setLobbyUsers(lobby.players || []);
-    syncLeaderboardFromPlayers(lobby.players || []);
 
     // Normalize status: "in-progress" -> "active"
     const normalizedStatus =
@@ -509,14 +501,11 @@ const Lobby = () => {
   const handleLobbyUpdate = (type: string, data: any) => {
     switch (type) {
       case "countdown-started":
+        clearRoundIntro();
         questionStartTimeRef.current = null;
         setLobbyStatus("countdown");
         setCountdown(data.countdown);
         setCurrentQuestionIndex(data.questionIndex);
-        toast({
-          title: "Countdown Started!",
-          description: `Question ${data.questionIndex} starting in ${data.countdown} seconds`,
-        });
         break;
 
       case "countdown":
@@ -549,26 +538,11 @@ const Lobby = () => {
         break;
 
       case "score-updated":
-        if (data.players?.length) {
-          setLobbyUsers(data.players);
-          syncLeaderboardFromPlayers(data.players);
-        } else {
-          setLobbyUsers((prev) => {
-            const next = prev.map((user) =>
-              user.userId === data.userId
-                ? { ...user, score: data.score }
-                : user,
-            );
-            syncLeaderboardFromPlayers(next);
-            return next;
-          });
-        }
-        if (data.leaderboard?.length) {
-          persistLeaderboard(data.leaderboard);
-        }
+        // Leaderboard updates are intentionally deferred until "question-ended".
         break;
 
       case "question-started":
+        clearRoundIntro();
         setRoundResults(null);
         setLobbyStatus("active");
         setCurrentQuestion(data.question);
@@ -584,10 +558,6 @@ const Lobby = () => {
         const elapsed = Math.floor((Date.now() - startMs) / 1000);
         setCountdown(Math.max(0, timeLimit - elapsed));
 
-        toast({
-          title: "Question Started!",
-          description: "Good luck!",
-        });
         break;
 
       case "question-ended": {
@@ -617,14 +587,6 @@ const Lobby = () => {
         }
 
         showQuestionEndResults(data);
-
-        if (data.isRoundOver) {
-          toast({
-            title: "Round complete",
-            description: "That was the last question in this round. Waiting for the host.",
-            duration: 8000,
-          });
-        }
         break;
       }
 
@@ -647,14 +609,14 @@ const Lobby = () => {
         setNextQuestionIndex(1);
         setIsRoundOver(false);
         setTotalQuestionsInRound(data.totalQuestionsInRound);
-        setCurrentRoundName(data.roundName || "");
+        setCurrentRoundName(`Round ${data.roundIndex + 1}`);
         setCurrentQuestion(null);
         setLobbyStatus("waiting");
         setCountdown(0);
-        toast({
-          title: "Round Changed!",
-          description: `Now playing: ${data.roundName}`,
-        });
+        showRoundIntro(
+          data.roundIndex + 1,
+          data.totalQuestionsInRound ?? QUESTIONS_PER_ROUND,
+        );
         break;
 
       case "game-ended": {
@@ -690,15 +652,6 @@ const Lobby = () => {
           }
         }
 
-        const winner = finalBoard[0];
-        toast({
-          title: "Game ended",
-          description: winner
-            ? `${winner.name} wins with ${winner.score} points! Opening final leaderboard…`
-            : "The game has ended. Opening final leaderboard…",
-          duration: 6000,
-        });
-
         setTimeout(() => {
           navigate("/leaderboard", {
             state: {
@@ -731,11 +684,6 @@ const Lobby = () => {
           setLiveLeaderboard([]);
           sessionStorage.removeItem("lobbyLiveLeaderboard");
         }
-        toast({
-          title: "Scores reset",
-          description:
-            data.message || "Leaderboard cleared for a new game",
-        });
         break;
 
       case "lobby-reset":
@@ -747,10 +695,6 @@ const Lobby = () => {
         setLobbyUsers([]);
         setLiveLeaderboard([]);
         sessionStorage.removeItem("lobbyLiveLeaderboard");
-        toast({
-          title: "Lobby Reset",
-          description: "Lobby has been reset",
-        });
         break;
 
       default:
@@ -767,11 +711,6 @@ const Lobby = () => {
     socketRef.current.emit("submit-answer", {
       questionId: currentQuestion.id,
       answer: answer,
-    });
-
-    toast({
-      title: "Answer Submitted!",
-      description: `You answered: ${answer}`,
     });
   };
 
@@ -795,8 +734,9 @@ const Lobby = () => {
   const progress = totalTime > 0 ? (countdown / totalTime) * 100 : 0;
 
   const roundLabel =
-    currentRoundName ||
-    (totalRounds > 0 ? `Round ${currentRound + 1}` : "No round active");
+    totalRounds > 0 && currentRound >= 0
+      ? `Round ${currentRound + 1}`
+      : "No round active";
 
   const questionProgressLabel = (() => {
     if (totalQuestionsInRound <= 0) return "Questions not loaded yet";
@@ -824,7 +764,21 @@ const Lobby = () => {
       ? (currentQuestionIndex / totalQuestionsInRound) * 100
       : 0;
 
-  console.log(currentQuestion);
+  const countdownSubtitle = (() => {
+    const parts: string[] = [];
+    if (totalRounds > 0 && currentRound >= 0) {
+      parts.push(`Round ${currentRound + 1}`);
+    }
+    if (currentQuestionIndex > 0) {
+      parts.push(`Question ${currentQuestionIndex}`);
+    }
+    if (parts.length > 0) {
+      return `${parts.join(" · ")} · Starting in`;
+    }
+    return currentQuestionIndex > 0
+      ? `Question ${currentQuestionIndex} · Starting in`
+      : "Question Starting In";
+  })();
 
   return (
     <div
@@ -863,7 +817,7 @@ const Lobby = () => {
                   {[
                     "Wait for host to start questions",
                     "Answer quickly for more points",
-                    "Scores update in real-time",
+                    "Scores update after each question",
                     "Game is organized into rounds",
                   ].map((text, i) => (
                     <li
@@ -1276,6 +1230,24 @@ const Lobby = () => {
         </div>
       )}
 
+      {roundIntro && (
+        <div className="fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#ff1a00] rounded-full blur-[150px] opacity-20" />
+
+          <div className="relative flex flex-col items-center text-center px-6">
+            <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-4">
+              New round
+            </span>
+            <span className="leaguegothic text-[8rem] leading-none italic uppercase tracking-wider bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent">
+              Round {roundIntro.roundNumber}
+            </span>
+            <p className="mt-6 text-base font-medium text-white/70 max-w-sm">
+              Get ready — {roundIntro.questionsInRound} questions this round
+            </p>
+          </div>
+        </div>
+      )}
+
       {lobbyStatus === "countdown" && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
           {/* Background Glow matching your gradient */}
@@ -1284,9 +1256,7 @@ const Lobby = () => {
           <div className="relative flex flex-col items-center">
             {/* Sub-header */}
             <span className="text-sm font-black uppercase tracking-[0.4em] text-slate-500 mb-2">
-              {currentQuestionIndex > 0
-                ? `Question ${currentQuestionIndex} · Starting in`
-                : "Question Starting In"}
+              {countdownSubtitle}
             </span>
 
             {/* Large Animated Countdown */}

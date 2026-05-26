@@ -154,7 +154,7 @@ export function LeaderboardCard({
         >
           OVERALL
         </Button>
-        {activeRounds.slice(0, 3).map((round) => (
+        {activeRounds.slice(0, 3).map((round, index) => (
           <Button
             key={round.id}
             onClick={() => setSelectedRoundId(round.id)}
@@ -165,7 +165,7 @@ export function LeaderboardCard({
                 : "bg-transparent text-white/60 border-white/10"
             }`}
           >
-            {round.name.toUpperCase()}
+            {`ROUND ${index + 1}`}
           </Button>
         ))}
       </div>
